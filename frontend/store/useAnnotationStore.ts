@@ -10,7 +10,7 @@ type Segment = {
 interface AnnotationState {
   currentTime: number;
   isPlaying: boolean;
-  inProgress: Segment[];
+  segments: Segment[];
   setCurrentTime: (time: number) => void;
   setPlaying: (playing: boolean) => void;
   startBehavior: (behavior: string, time: number) => void;
@@ -21,7 +21,7 @@ interface AnnotationState {
 export const useAnnotationStore = create<AnnotationState>((set, get) => ({
   currentTime: 0,
   isPlaying: false,
-  inProgress: [],
+  segments: [],
 
   setCurrentTime: (time: number) => {
     set({ currentTime: time });
@@ -33,24 +33,21 @@ export const useAnnotationStore = create<AnnotationState>((set, get) => ({
 
   startBehavior: (behavior: string, time: number) => {
     set({
-      inProgress: [
-        ...get().inProgress,
-        { behavior, startTime: time, notes: "" },
-      ],
+      segments: [...get().segments, { behavior, startTime: time }],
     });
   },
 
   endBehavior: (behavior: string, time: number) => {
     set({
-      inProgress: get().inProgress.map((seg) =>
-        seg.behavior === behavior && seg.endTime === undefined
-          ? { ...seg, endTime: time }
-          : seg
+      segments: get().segments.map((segment) =>
+        segment.behavior === behavior && segment.endTime === undefined
+          ? { ...segment, endTime: time }
+          : segment
       ),
     });
   },
 
   clearInProgress: () => {
-    set({ inProgress: [] });
+    set({ segments: [] });
   },
 }));
