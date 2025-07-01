@@ -3,7 +3,7 @@ import { create } from "zustand";
 type Segment = {
   behavior: string;
   startTime: number;
-  endTime?: number;
+  endTime: number | null;
   notes?: string;
 };
 
@@ -18,7 +18,7 @@ interface AnnotationState {
   clearInProgress: () => void;
 }
 
-export const useAnnotationStore = create<AnnotationState>((set, get) => ({
+export const useAnnotationStore = create<AnnotationState>((set) => ({
   currentTime: 0,
   isPlaying: false,
   segments: [],
@@ -32,19 +32,24 @@ export const useAnnotationStore = create<AnnotationState>((set, get) => ({
   },
 
   startBehavior: (behavior: string, time: number) => {
-    set({
-      segments: [...get().segments, { behavior, startTime: time }],
-    });
+    set((state) => ({
+      segments: [
+        ...state.segments,
+        { behavior, startTime: time, endTime: null },
+      ],
+    }));
   },
 
   endBehavior: (behavior: string, time: number) => {
-    set({
-      segments: get().segments.map((segment) =>
-        segment.behavior === behavior && segment.endTime === undefined
-          ? { ...segment, endTime: time }
-          : segment
-      ),
-    });
+    set((state) => ({
+      segments: state.segments.map((segment) => {
+        if (segment.behavior === behavior && segment.endTime === null) {
+          return { ...segment, endTime: time };
+        } else {
+          return segment;
+        }
+      }),
+    }));
   },
 
   clearInProgress: () => {
