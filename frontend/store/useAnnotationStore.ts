@@ -41,15 +41,27 @@ export const useAnnotationStore = create<AnnotationState>((set) => ({
   },
 
   endBehavior: (behavior: string, time: number) => {
-    set((state) => ({
-      segments: state.segments.map((segment) => {
-        if (segment.behavior === behavior && segment.endTime === null) {
-          return { ...segment, endTime: time };
+    set((state) => {
+      const updatedSegments = [...state.segments];
+      const segmentIndex = state.segments.findIndex(
+        (segment) => segment.behavior === behavior && segment.endTime === null
+      );
+
+      if (segmentIndex !== -1) {
+        const segment = state.segments[segmentIndex];
+        if (time < segment.startTime) {
+          console.warn("End time cannot be earlier than start time");
+          updatedSegments.splice(segmentIndex, 1);
         } else {
-          return segment;
+          updatedSegments[segmentIndex] = {
+            ...segment,
+            endTime: time,
+          };
         }
-      }),
-    }));
+      }
+
+      return { segments: updatedSegments };
+    });
   },
 
   clearInProgress: () => {
