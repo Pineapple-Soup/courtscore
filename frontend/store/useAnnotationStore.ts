@@ -32,12 +32,26 @@ export const useAnnotationStore = create<AnnotationState>((set) => ({
   },
 
   startBehavior: (behavior: string, time: number) => {
-    set((state) => ({
-      segments: [
-        ...state.segments,
-        { behavior, startTime: time, endTime: null },
-      ],
-    }));
+    set((state) => {
+      const isValid = !state.segments.some(
+        (segment) =>
+          segment.behavior === behavior &&
+          segment.endTime !== null &&
+          time >= segment.startTime &&
+          time <= segment.endTime
+      );
+
+      if (isValid) {
+        return {
+          segments: [
+            ...state.segments,
+            { behavior, startTime: time, endTime: null },
+          ],
+        };
+      }
+
+      return { segments: [...state.segments] };
+    });
   },
 
   endBehavior: (behavior: string, time: number) => {
