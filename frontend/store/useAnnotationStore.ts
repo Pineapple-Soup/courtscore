@@ -1,8 +1,9 @@
 import { create } from "zustand";
 import { Status } from "@/types/status";
+import { Behavior } from "@/types/behavior";
 
 type Segment = {
-  behavior: string;
+  behavior: Behavior;
   startTime: number;
   endTime: number | null;
   notes?: string;
@@ -14,9 +15,9 @@ interface AnnotationState {
   segments: Segment[];
   setCurrentTime: (time: number) => void;
   setPlaying: (playing: boolean) => void;
-  startBehavior: (behavior: string, time: number) => void;
-  endBehavior: (behavior: string, time: number) => void;
-  getStatus: (behavior: string) => Status;
+  startBehavior: (behavior: Behavior, time: number) => void;
+  endBehavior: (behavior: Behavior, time: number) => void;
+  getStatus: (behavior: Behavior) => Status;
   clearInProgress: () => void;
 }
 
@@ -33,7 +34,7 @@ export const useAnnotationStore = create<AnnotationState>((set, get) => ({
     set({ isPlaying: playing });
   },
 
-  startBehavior: (behavior: string, time: number) => {
+  startBehavior: (behavior: Behavior, time: number) => {
     set((state) => {
       const isValid = !state.segments.some(
         (segment) =>
@@ -56,7 +57,7 @@ export const useAnnotationStore = create<AnnotationState>((set, get) => ({
     });
   },
 
-  endBehavior: (behavior: string, time: number) => {
+  endBehavior: (behavior: Behavior, time: number) => {
     set((state) => {
       const updatedSegments = [...state.segments];
       const segmentIndex = state.segments.findIndex(
@@ -80,7 +81,7 @@ export const useAnnotationStore = create<AnnotationState>((set, get) => ({
     });
   },
 
-  getStatus: (behavior: string): Status => {
+  getStatus: (behavior: Behavior): Status => {
     const { segments, currentTime } = get();
 
     const relevantSegments = segments.filter(
