@@ -59,7 +59,7 @@ export const useAnnotationStore = create<AnnotationState>((set, get) => ({
 
   endBehavior: (behavior: Behavior, time: number) => {
     set((state) => {
-      const updatedSegments = [...state.segments];
+      let updatedSegments = [...state.segments];
       const segmentIndex = state.segments.findIndex(
         (segment) => segment.behavior === behavior && segment.endTime === null
       );
@@ -70,10 +70,43 @@ export const useAnnotationStore = create<AnnotationState>((set, get) => ({
           console.warn("End time cannot be earlier than start time");
           updatedSegments.splice(segmentIndex, 1);
         } else {
-          updatedSegments[segmentIndex] = {
-            ...segment,
-            endTime: time,
-          };
+          const overlappingIndices = state.segments
+            .map((s, idx) =>
+              s.behavior === behavior &&
+              s.endTime !== null &&
+              Math.max(segment.startTime, s.startTime) <=
+                Math.min(time, s.endTime!)
+                ? idx
+                : -1
+            )
+            .filter((idx) => idx !== -1);
+
+          if (overlappingIndices.length > 0) {
+            const overlappingSegments = overlappingIndices.map(
+              (idx) => state.segments[idx]
+            );
+            const allSegments = [segment, ...overlappingSegments];
+            const mergedSegment: Segment = {
+              behavior,
+              startTime: Math.min(...allSegments.map((s) => s.startTime)),
+              endTime: Math.max(time, ...allSegments.map((s) => s.endTime!)),
+              notes:
+                allSegments
+                  .map((s) => s.notes)
+                  .filter(Boolean)
+                  .join(" | ") || undefined,
+            };
+            updatedSegments = updatedSegments.filter(
+              (_, idx) =>
+                idx !== segmentIndex && !overlappingIndices.includes(idx)
+            );
+            updatedSegments.push(mergedSegment);
+          } else {
+            updatedSegments[segmentIndex] = {
+              ...segment,
+              endTime: time,
+            };
+          }
         }
       }
 
@@ -87,26 +120,28 @@ export const useAnnotationStore = create<AnnotationState>((set, get) => ({
     const relevantSegments = segments.filter(
       (segment: Segment) => segment.behavior === behavior
     );
+
     if (
       relevantSegments.some(
         (segment: Segment) =>
-          segment.behavior === behavior &&
-          segment.endTime !== null &&
-          segment.startTime < currentTime &&
-          segment.endTime > currentTime
-      )
-    ) {
-      return Status.COMPLETE;
-    } else if (
-      relevantSegments.some(
-        (segment: Segment) =>
-          segment.behavior === behavior && segment.endTime === null
+          segment.endTime === null && segment.startTime <= currentTime
       )
     ) {
       return Status.ACTIVE;
-    } else {
-      return Status.EMPTY;
     }
+
+    if (
+      relevantSegments.some(
+        (segment: Segment) =>
+          segment.endTime !== null &&
+          segment.startTime <= currentTime &&
+          segment.endTime! >= currentTime
+      )
+    ) {
+      return Status.COMPLETE;
+    }
+
+    return Status.EMPTY;
   },
 
   clearInProgress: () => {
