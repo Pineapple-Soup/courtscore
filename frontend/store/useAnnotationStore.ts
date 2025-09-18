@@ -1,20 +1,17 @@
 import { create } from "zustand";
-import { Status } from "@/types/status";
 import { Behavior } from "@/types/behavior";
-
-type Segment = {
-  behavior: Behavior;
-  startTime: number;
-  endTime: number | null;
-  notes?: string;
-};
+import { Segment } from "@/types/segment";
+import { Status } from "@/types/status";
 
 interface AnnotationState {
   currentTime: number;
+  duration: number;
   isPlaying: boolean;
   segments: Segment[];
   setCurrentTime: (time: number) => void;
+  setDuration: (duration: number) => void;
   setPlaying: (playing: boolean) => void;
+  setSegments: (segments: Segment[]) => void;
   startBehavior: (behavior: Behavior, time: number) => void;
   endBehavior: (behavior: Behavior, time: number) => void;
   getStatus: (behavior: Behavior) => Status;
@@ -23,6 +20,7 @@ interface AnnotationState {
 
 export const useAnnotationStore = create<AnnotationState>((set, get) => ({
   currentTime: 0,
+  duration: 0,
   isPlaying: false,
   segments: [],
 
@@ -30,8 +28,16 @@ export const useAnnotationStore = create<AnnotationState>((set, get) => ({
     set({ currentTime: time });
   },
 
+  setDuration: (duration: number) => {
+    set({ duration: duration });
+  },
+
   setPlaying: (playing: boolean) => {
     set({ isPlaying: playing });
+  },
+
+  setSegments: (segments: Segment[]) => {
+    set({ segments });
   },
 
   startBehavior: (behavior: Behavior, time: number) => {
