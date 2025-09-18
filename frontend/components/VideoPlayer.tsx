@@ -8,11 +8,15 @@ const VideoPlayer = (video: VideoPlayerProps) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const setCurrentTime = useAnnotationStore((s) => s.setCurrentTime);
   const setPlaying = useAnnotationStore((s) => s.setPlaying);
+  const setDuration = useAnnotationStore((s) => s.setDuration);
 
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
 
+    const onMetadataLoad = () => {
+      setDuration(video.duration);
+    };
     const onTimeUpdate = () => {
       setCurrentTime(video.currentTime);
     };
@@ -20,15 +24,17 @@ const VideoPlayer = (video: VideoPlayerProps) => {
     const onPause = () => setPlaying(false);
 
     video.addEventListener("timeupdate", onTimeUpdate);
+    video.addEventListener("loadedmetadata", onMetadataLoad);
     video.addEventListener("play", onPlay);
     video.addEventListener("pause", onPause);
 
     return () => {
       video.removeEventListener("timeupdate", onTimeUpdate);
+      video.removeEventListener("loadedmetadata", onMetadataLoad);
       video.removeEventListener("play", onPlay);
       video.removeEventListener("pause", onPause);
     };
-  }, [setCurrentTime, setPlaying]);
+  }, [setCurrentTime, setDuration, setPlaying]);
 
   return (
     <video
