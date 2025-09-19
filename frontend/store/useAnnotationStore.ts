@@ -12,6 +12,7 @@ interface AnnotationState {
   setDuration: (duration: number) => void;
   setPlaying: (playing: boolean) => void;
   setSegments: (segments: Segment[]) => void;
+  mergeSegments: (segments: Segment[], newSegment: Segment) => Segment[];
   startBehavior: (behavior: Behavior, time: number) => void;
   endBehavior: (behavior: Behavior, time: number) => void;
   getStatus: (behavior: Behavior) => Status;
@@ -40,6 +41,40 @@ export const useAnnotationStore = create<AnnotationState>((set, get) => ({
     set({ segments });
   },
 
+  mergeSegments: (segments: Segment[], newSegment: Segment): Segment[] => {
+    const { currentTime } = get();
+    const overlappingSegments = segments.filter(
+      (seg) =>
+        seg.behavior === newSegment.behavior &&
+        seg.endTime !== null &&
+        Math.max(newSegment.startTime, seg.startTime) <=
+          Math.min(newSegment.endTime || currentTime, seg.endTime!)
+    );
+
+    if (overlappingSegments.length > 0) {
+      const allSegments = [newSegment, ...overlappingSegments];
+      const mergedSegment: Segment = {
+        behavior: newSegment.behavior,
+        startTime: Math.min(...allSegments.map((s) => s.startTime)),
+        endTime: Math.max(
+          newSegment.endTime || 0,
+          ...allSegments.map((s) => s.endTime!)
+        ),
+        notes:
+          allSegments
+            .map((s) => s.notes)
+            .filter(Boolean)
+            .join(" | ") || undefined,
+      };
+
+      return segments
+        .filter((seg) => !overlappingSegments.includes(seg))
+        .concat(mergedSegment);
+    }
+
+    return segments.concat(newSegment);
+  },
+
   startBehavior: (behavior: Behavior, time: number) => {
     set((state) => {
       const isValid = !state.segments.some(
@@ -62,8 +97,9 @@ export const useAnnotationStore = create<AnnotationState>((set, get) => ({
   },
 
   endBehavior: (behavior: Behavior, time: number) => {
+    const { segments, mergeSegments } = get();
+
     set((state) => {
-      let updatedSegments = [...state.segments];
       const segmentIndex = state.segments.findIndex(
         (segment) => segment.behavior === behavior && segment.endTime === null
       );
@@ -73,48 +109,18 @@ export const useAnnotationStore = create<AnnotationState>((set, get) => ({
       const segment = state.segments[segmentIndex];
       if (time < segment.startTime) {
         console.warn("End time cannot be earlier than start time");
-        updatedSegments.splice(segmentIndex, 1);
+        return state;
       } else {
-        const overlappingIndices = state.segments
-          .map((s, idx) =>
-            s.behavior === behavior &&
-            s.endTime !== null &&
-            Math.max(segment.startTime, s.startTime) <=
-              Math.min(time, s.endTime!)
-              ? idx
-              : -1
-          )
-          .filter((idx) => idx !== -1);
-
-        if (overlappingIndices.length > 0) {
-          const overlappingSegments = overlappingIndices.map(
-            (idx) => state.segments[idx]
-          );
-          const allSegments = [segment, ...overlappingSegments];
-          const mergedSegment: Segment = {
-            behavior,
-            startTime: Math.min(...allSegments.map((s) => s.startTime)),
-            endTime: Math.max(time, ...allSegments.map((s) => s.endTime!)),
-            notes:
-              allSegments
-                .map((s) => s.notes)
-                .filter(Boolean)
-                .join(" | ") || undefined,
-          };
-          updatedSegments = updatedSegments.filter(
-            (_, idx) =>
-              idx !== segmentIndex && !overlappingIndices.includes(idx)
-          );
-          updatedSegments.push(mergedSegment);
-        } else {
-          updatedSegments[segmentIndex] = {
-            ...segment,
-            endTime: time,
-          };
-        }
+        const newSegment: Segment = {
+          ...segment,
+          endTime: time,
+        };
+        const updatedSegments = mergeSegments(
+          segments.filter((_, idx) => idx !== segmentIndex),
+          newSegment
+        );
+        return { segments: updatedSegments };
       }
-
-      return { segments: updatedSegments };
     });
   },
 
