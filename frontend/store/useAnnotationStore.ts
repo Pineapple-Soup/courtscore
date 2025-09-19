@@ -50,16 +50,14 @@ export const useAnnotationStore = create<AnnotationState>((set, get) => ({
           time <= segment.endTime
       );
 
-      if (isValid) {
-        return {
-          segments: [
-            ...state.segments,
-            { behavior, startTime: time, endTime: null },
-          ],
-        };
-      }
+      if (!isValid) return state;
 
-      return { segments: [...state.segments] };
+      return {
+        segments: [
+          ...state.segments,
+          { behavior, startTime: time, endTime: null },
+        ],
+      };
     });
   },
 
@@ -70,49 +68,49 @@ export const useAnnotationStore = create<AnnotationState>((set, get) => ({
         (segment) => segment.behavior === behavior && segment.endTime === null
       );
 
-      if (segmentIndex !== -1) {
-        const segment = state.segments[segmentIndex];
-        if (time < segment.startTime) {
-          console.warn("End time cannot be earlier than start time");
-          updatedSegments.splice(segmentIndex, 1);
-        } else {
-          const overlappingIndices = state.segments
-            .map((s, idx) =>
-              s.behavior === behavior &&
-              s.endTime !== null &&
-              Math.max(segment.startTime, s.startTime) <=
-                Math.min(time, s.endTime!)
-                ? idx
-                : -1
-            )
-            .filter((idx) => idx !== -1);
+      if (segmentIndex === -1) return state;
 
-          if (overlappingIndices.length > 0) {
-            const overlappingSegments = overlappingIndices.map(
-              (idx) => state.segments[idx]
-            );
-            const allSegments = [segment, ...overlappingSegments];
-            const mergedSegment: Segment = {
-              behavior,
-              startTime: Math.min(...allSegments.map((s) => s.startTime)),
-              endTime: Math.max(time, ...allSegments.map((s) => s.endTime!)),
-              notes:
-                allSegments
-                  .map((s) => s.notes)
-                  .filter(Boolean)
-                  .join(" | ") || undefined,
-            };
-            updatedSegments = updatedSegments.filter(
-              (_, idx) =>
-                idx !== segmentIndex && !overlappingIndices.includes(idx)
-            );
-            updatedSegments.push(mergedSegment);
-          } else {
-            updatedSegments[segmentIndex] = {
-              ...segment,
-              endTime: time,
-            };
-          }
+      const segment = state.segments[segmentIndex];
+      if (time < segment.startTime) {
+        console.warn("End time cannot be earlier than start time");
+        updatedSegments.splice(segmentIndex, 1);
+      } else {
+        const overlappingIndices = state.segments
+          .map((s, idx) =>
+            s.behavior === behavior &&
+            s.endTime !== null &&
+            Math.max(segment.startTime, s.startTime) <=
+              Math.min(time, s.endTime!)
+              ? idx
+              : -1
+          )
+          .filter((idx) => idx !== -1);
+
+        if (overlappingIndices.length > 0) {
+          const overlappingSegments = overlappingIndices.map(
+            (idx) => state.segments[idx]
+          );
+          const allSegments = [segment, ...overlappingSegments];
+          const mergedSegment: Segment = {
+            behavior,
+            startTime: Math.min(...allSegments.map((s) => s.startTime)),
+            endTime: Math.max(time, ...allSegments.map((s) => s.endTime!)),
+            notes:
+              allSegments
+                .map((s) => s.notes)
+                .filter(Boolean)
+                .join(" | ") || undefined,
+          };
+          updatedSegments = updatedSegments.filter(
+            (_, idx) =>
+              idx !== segmentIndex && !overlappingIndices.includes(idx)
+          );
+          updatedSegments.push(mergedSegment);
+        } else {
+          updatedSegments[segmentIndex] = {
+            ...segment,
+            endTime: time,
+          };
         }
       }
 
