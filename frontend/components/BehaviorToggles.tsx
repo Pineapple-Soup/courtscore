@@ -59,9 +59,6 @@ const BehaviorToggles = () => {
                 }`}>
                 {Behavior[id]}
               </button>
-              <button className='p-2 flex items-center justify-center aspect-square border rounded-lg'>
-                Notes
-              </button>
             </div>
           ))}
       </div>
