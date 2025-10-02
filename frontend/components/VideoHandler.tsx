@@ -35,7 +35,7 @@ const VideoHandler = () => {
           <p>No Video</p>
           <button
             onClick={handleUploadClick}
-            className='px-4 py-2 bg-neutral-300 border-2 border-neutral-50 rounded-lg hover:bg-neutral-400 transition'>
+            className='px-4 py-2 bg-neutral-300 border-2 border-neutral-500 rounded-lg hover:bg-neutral-400 cursor-pointer transition'>
             Upload Video
           </button>
         </div>
