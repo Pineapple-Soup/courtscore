@@ -39,18 +39,20 @@ const BehaviorToggles = () => {
   }, [toggleBehavior]);
 
   return (
-    <div className='flex flex-col w-full gap-4 items-center'>
-      <h3 className='font-semibold'>Behaviors</h3>
-      <div className='flex flex-col gap-8'>
+    <div className='flex flex-col w-full'>
+      <h3 className='flex justify-center font-semibold'>Behaviors</h3>
+      <div className='flex flex-col gap-4'>
         {Object.values(Behavior)
           .filter((value) => typeof value === "number")
           .map((id) => (
-            <div key={id} className='flex items-center gap-4'>
+            <div
+              key={id}
+              className='flex justify-center items-center gap-4 min-w-fit'>
               <p>[{id}]</p>
               <button
                 onClick={() => toggleBehavior(id as Behavior)}
                 disabled={getStatus(id as Behavior) === Status.COMPLETE}
-                className={`flex flex-1 justify-center py-2 px-2 border rounded-lg cursor-pointer ${
+                className={`flex items-center justify-center w-full h-8 border-2 border-neutral-500 rounded-lg cursor-pointer ${
                   getStatus(id as Behavior) === Status.ACTIVE
                     ? "bg-blue-500 text-white"
                     : getStatus(id as Behavior) === Status.EMPTY
@@ -59,6 +61,9 @@ const BehaviorToggles = () => {
                 }`}>
                 {Behavior[id]}
               </button>
+              <p>
+                {segments.filter((segment) => segment.behavior === id).length}
+              </p>
             </div>
           ))}
       </div>
