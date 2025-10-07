@@ -3,6 +3,7 @@ export enum Behavior {
   FOLLOWING,
   TAPPING,
   SINGING,
+  LICKING,
   ATT_COPULATION,
   SUC_COPULATION,
 }
