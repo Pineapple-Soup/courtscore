@@ -57,7 +57,7 @@ export const useAnnotationStore = create<AnnotationState>((set, get) => ({
         behavior: newSegment.behavior,
         startTime: Math.min(...allSegments.map((s) => s.startTime)),
         endTime: Math.max(
-          newSegment.endTime || 0,
+          newSegment.endTime || currentTime,
           ...allSegments.map((s) => s.endTime!)
         ),
         notes:

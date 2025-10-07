@@ -18,7 +18,7 @@ const VideoPlayer = (video: VideoPlayerProps) => {
       setDuration(video.duration);
     };
     const onTimeUpdate = () => {
-      setCurrentTime(video.currentTime);
+      setCurrentTime(Number(video.currentTime.toFixed(2)));
     };
     const onPlay = () => setPlaying(true);
     const onPause = () => setPlaying(false);
