@@ -1,0 +1,11 @@
+
+.venv/
+.env
+
+tmp/
+__pycache__/
+
+**/runs/
+**/weights/
+*.pt
+*.pth
