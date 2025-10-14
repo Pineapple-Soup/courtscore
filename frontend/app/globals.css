@@ -19,6 +19,9 @@
   }
 }
 
+@utility hide-scrollbar {
+  @apply [scrollbar-width:none] [&::-webkit-scrolbar]:hidden;
+}
 body {
   background: var(--background);
   color: var(--foreground);
