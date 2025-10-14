@@ -1,0 +1,5 @@
+path: models/yolo/data
+train: images/train
+val: images/val
+names:
+  0: chamber
