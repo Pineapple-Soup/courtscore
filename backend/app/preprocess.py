@@ -23,10 +23,8 @@ def find_first_frame(video_path, model, conf_threshold=0.5):
         frame_idx += 1
     capture.release()
     if found_frame is not None:
-        print(f"First frame with chamber detected: {found_frame}")
         return results.boxes.xyxy, found_frame
     else:
-        print("No chambers detected in the video")
         return None, None
 
 def reencode_video(input_video_path):
@@ -69,14 +67,23 @@ def process_video(video_path, output_dir, model_path, conf_threshold=0.5, buffer
         y1 = max(0, y1 - buffer)
         x2 = min(frame_width, x2 + buffer)
         y2 = min(frame_height, y2 + buffer)
+
+        if not os.path.exists(output_dir):
+            os.makedirs(output_dir)
+
+        if not os.access(output_dir, os.W_OK):
+            raise PermissionError(f"Cannot write to directory: {output_dir}")
+
         out_path = os.path.join(output_dir, f"{file_name}_chamber_{idx}.mp4")
         width, height = x2 - x1, y2 - y1
         writer = cv2.VideoWriter(
             out_path,
-            cv2.VideoWriter_fourcc(*'mp4v'),
+            cv2.VideoWriter_fourcc(*'H264'),
             fps,
             (width, height)
         )
+        if not writer.isOpened():
+            raise ValueError(f"Failed to open video writer for {out_path}")
         chamber_trackers[idx] = {
             "writer": writer,
             "path": out_path,
@@ -96,15 +103,16 @@ def process_video(video_path, output_dir, model_path, conf_threshold=0.5, buffer
             tracker["writer"].write(crop_resized)
 
     capture.release()
+    result = []
     for tracker in chamber_trackers.values():
         tracker["writer"].release()
-        reencode_video(tracker["path"])
-
+        result.append(tracker["path"])
+    return result
 
 if __name__ == "__main__":
     video_path = "tmp/example.mts"
     output_dir = "tmp/out"
     print("Processing video...")
     os.makedirs(output_dir, exist_ok=True)
-    process_video(video_path, output_dir, model_path="models/yolo/runs/chamber_detector/weights/best.pt", conf_threshold=0.5, buffer=100)
-    print("Processing complete.")
+    process_video(video_path, output_dir, model_path="models/yolo/best.pt", conf_threshold=0.5, buffer=100)
+    print("Processing complete")
