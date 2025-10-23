@@ -18,6 +18,7 @@ interface AnnotationState {
   startBehavior: (behavior: Behavior, time: number) => void;
   endBehavior: (behavior: Behavior, time: number) => void;
   getStatus: (behavior: Behavior) => Status;
+  getActiveBehaviors: (time: number) => Behavior[];
   clearInProgress: () => void;
 }
 
@@ -159,6 +160,18 @@ export const useAnnotationStore = create<AnnotationState>((set, get) => ({
     }
 
     return Status.EMPTY;
+  },
+
+  getActiveBehaviors: (time: number): Behavior[] => {
+    const { segments } = get();
+
+    return segments
+      .filter(
+        (segment) =>
+          segment.startTime <= time &&
+          (segment.endTime === null || segment.endTime >= time)
+      )
+      .map((segment) => segment.behavior);
   },
 
   clearInProgress: () => {
