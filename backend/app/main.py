@@ -38,7 +38,7 @@ def upload_file(file: UploadFile = File(...), db: Session = Depends(get_db)):
         processed_files = preprocess.process_video(file_location, settings.OUTPUT_PATH, model_path)
         for processed_file in processed_files:
             video_id, gcp_path = gcs.upload_video_to_gcs(processed_file)
-            new_video = Video(id=video_id, src=gcp_path, label=os.path.basename(processed_file))
+            new_video = Video(id=video_id, src=gcp_path, label=os.path.splitext(os.path.basename(processed_file))[0])
             print("Created Video")
             db.add(new_video)
             db.commit()
