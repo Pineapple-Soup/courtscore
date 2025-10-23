@@ -4,10 +4,12 @@ import { Segment } from "@/types/segment";
 import { Status } from "@/types/status";
 
 interface AnnotationState {
+  videoId: string;
   currentTime: number;
   duration: number;
   isPlaying: boolean;
   segments: Segment[];
+  setVideoId: (id: string) => void;
   setCurrentTime: (time: number) => void;
   setDuration: (duration: number) => void;
   setPlaying: (playing: boolean) => void;
@@ -20,10 +22,15 @@ interface AnnotationState {
 }
 
 export const useAnnotationStore = create<AnnotationState>((set, get) => ({
+  videoId: "",
   currentTime: 0,
   duration: 0,
   isPlaying: false,
   segments: [],
+
+  setVideoId: (id: string) => {
+    set({ videoId: id });
+  },
 
   setCurrentTime: (time: number) => {
     set({ currentTime: time });
