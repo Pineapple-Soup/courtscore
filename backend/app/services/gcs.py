@@ -1,3 +1,4 @@
+import datetime
 import uuid
 
 from core.config import settings
@@ -12,3 +13,9 @@ def upload_video_to_gcs(video_path):
     blob = bucket.blob(blob_name)
     blob.upload_from_filename(video_path)
     return video_id, blob_name
+
+def generate_signed_url(blob_name):
+    bucket = storage_client.bucket(settings.GCS_BUCKET_NAME)
+    blob = bucket.blob(blob_name)
+    url = blob.generate_signed_url(expiration=datetime.timedelta(hours=3), method='GET')
+    return url

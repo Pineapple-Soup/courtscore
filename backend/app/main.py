@@ -26,7 +26,7 @@ os.makedirs(settings.UPLOAD_DIRECTORY, exist_ok=True)
 os.makedirs(settings.OUTPUT_PATH, exist_ok=True)
 
 @app.post("/api/v1/upload_video", status_code=201)
-async def upload_file(file: UploadFile = File(...), db: Session = Depends(get_db)):
+def upload_file(file: UploadFile = File(...), db: Session = Depends(get_db)):
     try:
         file_location = os.path.join(settings.UPLOAD_DIRECTORY, file.filename)
         with open(file_location, "wb") as buffer:
@@ -53,24 +53,34 @@ async def upload_file(file: UploadFile = File(...), db: Session = Depends(get_db
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
 
-
 @app.get("/api/v1/videos")
-async def list_videos(db: Session = Depends(get_db)):
+def list_videos(db: Session = Depends(get_db)):
     try:
         db_videos = db.query(Video).all()
+        return db_videos
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to fetch videos: {str(e)}")
-    videos = [
-        {
-            "id": video.id,
-            "src": video.src,
-            "label": video.label,
-            "status": video.status,
-        }
-        for video in db_videos
-    ]
-    return videos
 
+@app.get("/api/v1/video/{id}")
+def get_video(id: str, db: Session = Depends(get_db)):
+    try:
+        video = db.query(Video).filter(Video.id == id).first()
+        if not video:
+            raise HTTPException(status_code=404, detail="Video not found")
+        return video
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch video: {str(e)}")
+
+@app.get("/api/v1/video/{id}/url/")
+def stream_video(id: str, db: Session = Depends(get_db)):
+    try:
+        video = db.query(Video).filter(Video.id == id).first()
+        if not video:
+            raise HTTPException(status_code=404, detail="Video not found")
+        signed_url = gcs.generate_signed_url(video.src)
+        return {"signed_url": signed_url, "expiration": 3}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch video stream: {str(e)}")
 
 if __name__ == "__main__":
     uvicorn.run("main:app", host="127.0.0.1", port=8000, reload=True)
