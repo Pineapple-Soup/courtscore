@@ -1,55 +1,59 @@
-'use client';
+"use client";
 
-import { useEffect, useState } from "react";
-import { Video } from "@/types/video";
+import { useEffect } from "react";
+import { useVideoStore } from "@/store/useVideoStore";
+import { ExternalLink } from "lucide-react";
 
 const VideoList = () => {
-    const [videos, setVideos] = useState<Video[] | null>(null);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
+  const videos = useVideoStore((s) => s.videos);
+  const loading = useVideoStore((s) => s.loading);
+  const error = useVideoStore((s) => s.error);
+  const fetchVideos = useVideoStore((s) => s.fetchVideos);
 
-    useEffect(() => {
-        let mounted = true;
-        const fetchVideos = async () => {
-            try {
-                const res = await fetch('http://localhost:8000/api/v1/videos');
-                if (!res.ok) throw new Error(`HTTP ${res.status}`);
-                const data = await res.json();
-                if (mounted) setVideos(Array.isArray(data) ? data : []);
-            } catch (e: any) {
-                if (mounted) setError(e.message || 'Failed to fetch videos');
-            } finally {
-                if (mounted) setLoading(false);
-            }
-        };
+  useEffect(() => {
+    fetchVideos();
+  }, [fetchVideos]);
 
-        fetchVideos();
+  if (loading) return <div>Loading videos…</div>;
+  if (error) return <div style={{ color: "red" }}>Error: {error}</div>;
+  if (!videos || videos.length === 0) return <div>No videos found.</div>;
 
-        return () => {
-            mounted = false;
-        };
-    }, []);
-
-    if (loading) return <div>Loading videos…</div>;
-    if (error) return <div style={{ color: 'red' }}>Error: {error}</div>;
-    if (!videos || videos.length === 0) return <div>No videos found.</div>;
-
-    return (
-        <div style={{ display: 'grid', gap: 12, gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))' }}>
-            {videos.map((v) => (
-                <div key={v.id} style={{ border: '1px solid #eee', borderRadius: 8, padding: 8 }}>
-                    {v.thumbnail ? (
-                        <img src={v.thumbnail} alt={v.title || v.id} style={{ width: '100%', height: 160, objectFit: 'cover', borderRadius: 4 }} />
-                    ) : null}
-                    <h4 style={{ margin: '8px 0' }}>{v.title || 'Untitled'}</h4>
-                    <video src={v.src} controls style={{ width: '100%', borderRadius: 4, background: '#000' }} />
-                    <div style={{ marginTop: 8 }}>
-                        <a href={v.src} target="_blank" rel="noopener noreferrer">Open in new tab</a>
-                    </div>
-                </div>
-            ))}
+  return (
+    <div className='grid grid-cols-4 gap-2'>
+      {videos.map((v) => (
+        <div
+          key={v.id}
+          className='flex flex-col gap-2 p-2 border border-neutral-300 rounded'>
+          <div className='flex items-end justify-between p-2 aspect-video bg-neutral-200 rounded animate-pulse'>
+            <div className='text-sm w-fit rounded-full p-1 border'>
+              {/* Video Duration Placeholder */}
+            </div>
+            <div
+              className={`text-sm w-fit rounded-full p-1 border ${
+                v.status === "Not Started"
+                  ? "bg-red-300 border-red-400"
+                  : v.status === "In Progress"
+                  ? "bg-green-300 border-green-400"
+                  : ""
+              }`}>
+              {v.status}
+            </div>
+          </div>
+          <h4>{v.id || "Untitled"}</h4>
+          <div className='flex items-center justify-end'>
+            <a
+              className='flex gap-2 py-2 px-4 text-white bg-blue-500 hover:bg-blue-600 rounded cursor-pointer'
+              href={`/annotate/${v.id}`}
+              target='_blank'
+              rel='noopener noreferrer'>
+              <p>Annotate</p>
+              <ExternalLink />
+            </a>
+          </div>
         </div>
-    );
+      ))}
+    </div>
+  );
 };
 
 export default VideoList;
