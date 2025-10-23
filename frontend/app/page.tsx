@@ -1,9 +1,9 @@
-import AnnotationWorkspace from "@/components/AnnotationWorkspace";
+import Dashboard from "@/components/Dashboard";
 
 export default function Home() {
   return (
     <div className='flex flex-col'>
-      <AnnotationWorkspace />
+      <Dashboard />
     </div>
   );
 }
