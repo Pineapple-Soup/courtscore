@@ -1,10 +1,11 @@
 import shutil
 import os
+import uuid
 import uvicorn
 
 from core.config import settings
 from database.db import init_db, get_db
-from database.models import Video
+from database.models import Video, Annotations
 from fastapi import Body, Depends, FastAPI, File, UploadFile, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from services import gcs, preprocess
@@ -94,6 +95,38 @@ def stream_video(id: str, db: Session = Depends(get_db)):
         return {"signed_url": signed_url, "expiration": 3}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to fetch video stream: {str(e)}")
+
+@app.post("/api/v1/annotations/")
+def create_annotation(annotation: dict = Body(...), db: Session = Depends(get_db)):
+    try:
+        new_annotation = Annotations(id=str(uuid.uuid4()),video_id=annotation['video_id'],segments=annotation["segments"])
+        db.add(new_annotation)
+        db.commit()
+        db.refresh(new_annotation)
+        return {"success": True, "annotation": new_annotation}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    
+@app.put("/api/v1/annotations/{id}")
+def update_annotation(id: str, annotation: dict = Body(...), db: Session = Depends(get_db)):
+    existing_annotation = db.query(Annotations).filter(Annotations.video_id == id).first()
+    if not existing_annotation:
+        raise HTTPException(status_code=404, detail="Annotation not found")
+    try:
+        existing_annotation.segments = annotation['segments']
+        db.commit()
+        db.refresh(existing_annotation)
+        return {"success": True, "annotation": existing_annotation}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    
+@app.get("/api/v1/annotations/{id}")
+def get_annotation(id: str, db: Session = Depends(get_db)):
+    annotation = db.query(Annotations).filter(Annotations.video_id == id).first()
+    if not annotation:
+        raise HTTPException(status_code=404, detail="Annotation not found")
+    return annotation
+
 
 if __name__ == "__main__":
     uvicorn.run("main:app", host="127.0.0.1", port=8000, reload=True)
