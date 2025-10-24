@@ -5,7 +5,7 @@ import uvicorn
 from core.config import settings
 from database.db import init_db, get_db
 from database.models import Video
-from fastapi import Depends, FastAPI, File, UploadFile, HTTPException
+from fastapi import Body, Depends, FastAPI, File, UploadFile, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from services import gcs, preprocess
 from sqlalchemy.orm import Session
@@ -61,7 +61,20 @@ def list_videos(db: Session = Depends(get_db)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to fetch videos: {str(e)}")
 
-@app.get("/api/v1/video/{id}")
+@app.put("/api/v1/videos/{id}")
+def update_video(id: str, video: dict = Body(...), db: Session = Depends(get_db)):
+    existing_video = db.query(Video).filter(Video.id == id).first()
+    if not existing_video:
+        raise HTTPException(status_code=404, detail="Video not found")
+    try:
+        existing_video.status = video['status']
+        db.commit()
+        db.refresh(existing_video)
+        return {"success": True, "video": existing_video}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/v1/videos/{id}")
 def get_video(id: str, db: Session = Depends(get_db)):
     try:
         video = db.query(Video).filter(Video.id == id).first()
@@ -71,7 +84,7 @@ def get_video(id: str, db: Session = Depends(get_db)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to fetch video: {str(e)}")
 
-@app.get("/api/v1/video/{id}/url/")
+@app.get("/api/v1/videos/{id}/url/")
 def stream_video(id: str, db: Session = Depends(get_db)):
     try:
         video = db.query(Video).filter(Video.id == id).first()
