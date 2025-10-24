@@ -1,5 +1,5 @@
 from database.db import Base
-from sqlalchemy import Column, String, TIMESTAMP
+from sqlalchemy import Column, ForeignKey, String, TIMESTAMP, JSON
 from sqlalchemy.sql import func
 
 
@@ -18,3 +18,10 @@ class Users(Base):
 
     id = Column(String, primary_key=True, index=True)
     name = Column(String, nullable=False)
+
+class Annotations(Base):
+    __tablename__ = "annotations"
+
+    id = Column(String, primary_key=True, index=True)
+    video_id = Column(String, ForeignKey("videos.id"), nullable=False, index=True)
+    segments = Column(JSON, nullable=False)
