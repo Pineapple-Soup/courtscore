@@ -134,14 +134,11 @@ const ControlPanel = () => {
 
     const createAnnotation = async () => {
       try {
-        const res = await fetch(
-          `http://localhost:8000/api/v1/annotations/${videoId}`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(annotationData),
-          }
-        );
+        const res = await fetch(`http://localhost:8000/api/v1/annotations/`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(annotationData),
+        });
         if (res.ok) {
           return await res.json();
         } else {
