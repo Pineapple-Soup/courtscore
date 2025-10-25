@@ -63,6 +63,7 @@ const ControlPanel = () => {
   };
 
   const handleExport = async () => {
+    // TODO: Migrate to API endpoint
     const behaviorIds = Object.values(Behavior).filter(
       (value) => typeof value === "number"
     );
@@ -114,6 +115,65 @@ const ControlPanel = () => {
       segments: segments,
     };
 
+    const checkAnnotation = async () => {
+      try {
+        const res = await fetch(
+          `http://localhost:8000/api/v1/annotations/${videoId}`
+        );
+        if (res.ok) {
+          return await res.json();
+        } else if (res.status === 404) {
+          return null;
+        } else {
+          throw new Error("Failed to check annotation existence");
+        }
+      } catch (err) {
+        console.error("Error checking annotation existence", err);
+      }
+    };
+
+    const createAnnotation = async () => {
+      try {
+        const res = await fetch(
+          `http://localhost:8000/api/v1/annotations/${videoId}`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(annotationData),
+          }
+        );
+        if (res.ok) {
+          return await res.json();
+        } else {
+          throw new Error("Failed to create annotation");
+        }
+      } catch (err) {
+        console.error("Error creating annotation", err);
+        throw err;
+      }
+    };
+
+    const updateAnnotation = async () => {
+      try {
+        const res = await fetch(
+          `http://localhost:8000/api/v1/annotations/${videoId}`,
+          {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(annotationData),
+          }
+        );
+        if (res.ok) {
+          return await res.json();
+        } else {
+          throw new Error("Failed to update annotation");
+        }
+      } catch (err) {
+        console.error("Error creating annotation", err);
+        throw err;
+      }
+    };
+
     const updateVideoStatus = async () => {
       try {
         if (!videoInfo) return;
@@ -130,44 +190,26 @@ const ControlPanel = () => {
           }
         );
 
-        if (!res.ok) throw new Error("Failed to update video status");
-
-        setVideoInfo(updatedVideo);
+        if (res.ok) {
+          setVideoInfo(updatedVideo);
+          return await res.json();
+        } else {
+          throw new Error("Failed to update video status");
+        }
       } catch (err) {
         console.error("Error updating video status", err);
+        throw err;
       }
     };
 
     try {
-      const checkResult = await fetch(
-        `http://localhost:8000/api/v1/annotations/${videoId}`
-      );
-      if (checkResult.ok) {
-        const updateResult = await fetch(
-          `http://localhost:8000/api/v1/annotations/${videoId}`,
-          {
-            method: "PUT",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ segments }),
-          }
-        );
-        if (!updateResult.ok) throw new Error("Failed to update annotation");
-        await updateVideoStatus();
-      } else if (checkResult.status == 404) {
-        const createResult = await fetch(
-          "http://localhost:8000/api/v1/annotations/",
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(annotationData),
-          }
-        );
-
-        if (!createResult.ok) throw new Error("Failed to create annotation");
-        await updateVideoStatus();
+      const existingAnnotation = await checkAnnotation();
+      if (existingAnnotation) {
+        await updateAnnotation();
       } else {
-        throw new Error("Failed to check annotation existence");
+        await createAnnotation();
       }
+      await updateVideoStatus();
     } catch (err) {
       console.error("Failed to save annotation", err);
     }
