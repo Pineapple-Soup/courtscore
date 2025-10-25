@@ -20,7 +20,7 @@ const VideoHandler = () => {
 
   const getSignedURL = async (id: string) => {
     try {
-      const res = await fetch(`http://localhost:8000/api/v1/video/${id}/url`);
+      const res = await fetch(`http://localhost:8000/api/v1/videos/${id}/url`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       if (data) {

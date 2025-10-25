@@ -7,7 +7,9 @@ import { Video } from "@/types/video";
 import ResetModal from "@/components/ResetModal";
 
 const ControlPanel = () => {
+  const segments = useAnnotationStore((s) => s.segments);
   const videoId = useAnnotationStore((s) => s.videoId);
+  const setSegments = useAnnotationStore((s) => s.setSegments);
   const getActiveBehaviors = useAnnotationStore((s) => s.getActiveBehaviors);
   const clearInProgress = useAnnotationStore((s) => s.clearInProgress);
   const [videoInfo, setVideoInfo] = useState<Video | null>(null);
@@ -17,7 +19,7 @@ const ControlPanel = () => {
     const fetchVideoInfo = async () => {
       try {
         const res = await fetch(
-          `http://localhost:8000/api/v1/video/${videoId}`
+          `http://localhost:8000/api/v1/videos/${videoId}`
         );
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
@@ -26,17 +28,34 @@ const ControlPanel = () => {
           return;
         }
       } catch (err) {
-        console.error("Failed to fetch video ", err);
+        console.error("Failed to fetch video", err);
       }
       setVideoInfo(null);
     };
 
+    const fetchAnnotationInfo = async () => {
+      try {
+        const res = await fetch(
+          `http://localhost:8000/api/v1/annotations/${videoId}`
+        );
+        if (res.ok) {
+          const data = await res.json();
+          if (data) {
+            setSegments(data.segments);
+          }
+        }
+      } catch (err) {
+        console.log("Failed to fetch annotation", err);
+      }
+    };
+
     if (videoId) {
       fetchVideoInfo();
+      fetchAnnotationInfo();
     } else {
       setVideoInfo(null);
     }
-  }, [videoId]);
+  }, [videoId, setSegments]);
 
   const handleReset = () => {
     clearInProgress();
@@ -89,6 +108,71 @@ const ControlPanel = () => {
     URL.revokeObjectURL(url);
   };
 
+  const handleSave = async () => {
+    const annotationData = {
+      video_id: videoId,
+      segments: segments,
+    };
+
+    const updateVideoStatus = async () => {
+      try {
+        if (!videoInfo) return;
+        const status =
+          !segments || segments.length === 0 ? "Not Started" : "In Progress";
+        const updatedVideo: Video = { ...videoInfo, status };
+
+        const res = await fetch(
+          `http://localhost:8000/api/v1/videos/${videoId}`,
+          {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(updatedVideo),
+          }
+        );
+
+        if (!res.ok) throw new Error("Failed to update video status");
+
+        setVideoInfo(updatedVideo);
+      } catch (err) {
+        console.error("Error updating video status", err);
+      }
+    };
+
+    try {
+      const checkResult = await fetch(
+        `http://localhost:8000/api/v1/annotations/${videoId}`
+      );
+      if (checkResult.ok) {
+        const updateResult = await fetch(
+          `http://localhost:8000/api/v1/annotations/${videoId}`,
+          {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ segments }),
+          }
+        );
+        if (!updateResult.ok) throw new Error("Failed to update annotation");
+        await updateVideoStatus();
+      } else if (checkResult.status == 404) {
+        const createResult = await fetch(
+          "http://localhost:8000/api/v1/annotations/",
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(annotationData),
+          }
+        );
+
+        if (!createResult.ok) throw new Error("Failed to create annotation");
+        await updateVideoStatus();
+      } else {
+        throw new Error("Failed to check annotation existence");
+      }
+    } catch (err) {
+      console.error("Failed to save annotation", err);
+    }
+  };
+
   return (
     <div className='grid grid-rows-2 grid-cols-2 gap-4'>
       <button
@@ -108,7 +192,8 @@ const ControlPanel = () => {
       <button
         className='rounded-lg bg-green-500 hover:bg-green-600 text-white font-semibold cursor-pointer'
         aria-label='Save'
-        type='button'>
+        type='button'
+        onClick={() => handleSave()}>
         Save
       </button>
       <button
