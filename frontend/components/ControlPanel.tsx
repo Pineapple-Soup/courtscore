@@ -129,6 +129,7 @@ const ControlPanel = () => {
         }
       } catch (err) {
         console.error("Error checking annotation existence", err);
+        throw err;
       }
     };
 
@@ -166,7 +167,7 @@ const ControlPanel = () => {
           throw new Error("Failed to update annotation");
         }
       } catch (err) {
-        console.error("Error creating annotation", err);
+        console.error("Error updating annotation", err);
         throw err;
       }
     };

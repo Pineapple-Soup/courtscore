@@ -85,7 +85,7 @@ def get_video(id: str, db: Session = Depends(get_db)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to fetch video: {str(e)}")
 
-@app.get("/api/v1/videos/{id}/url/")
+@app.get("/api/v1/videos/{id}/url")
 def stream_video(id: str, db: Session = Depends(get_db)):
     try:
         video = db.query(Video).filter(Video.id == id).first()
