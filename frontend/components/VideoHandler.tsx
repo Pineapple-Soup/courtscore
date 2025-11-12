@@ -1,45 +1,45 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useState } from "react";
+import { usePathname } from "next/navigation";
+import { useAnnotationStore } from "@/store/useAnnotationStore";
 import VideoPlayer from "@/components/VideoPlayer";
 
 const VideoHandler = () => {
+  const pathname = usePathname();
+  const videoId = useAnnotationStore((state) => state.videoId);
+  const setVideoId = useAnnotationStore((state) => state.setVideoId);
   const [videoSrc, setVideoSrc] = useState<string | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const handleUploadClick = () => {
-    fileInputRef.current?.click();
-  };
+  useEffect(() => {
+    const match = pathname?.match(/\/annotate\/([a-f0-9\-]{36})/);
+    if (match && match[1]) {
+      setVideoId(match[1]);
+    }
+  }, [pathname, setVideoId]);
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const url = URL.createObjectURL(file);
-      setVideoSrc(url);
+  const getSignedURL = async (id: string) => {
+    try {
+      const res = await fetch(`http://localhost:8000/api/v1/videos/${id}/url`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      if (data) {
+        setVideoSrc(data["signed_url"]);
+      }
+    } catch {
+      console.log("error");
     }
   };
 
+  useEffect(() => {
+    if (videoId) {
+      getSignedURL(videoId);
+    }
+  }, [videoId]);
+
   return (
     <div className='flex items-center justify-center aspect-video border-4 border-neutral-400 rounded-2xl'>
-      {videoSrc != null ? (
-        <VideoPlayer src={videoSrc} />
-      ) : (
-        <div className='flex flex-col items-center'>
-          <input
-            type='file'
-            accept='video/*'
-            ref={fileInputRef}
-            onChange={handleFileUpload}
-            className='hidden'
-          />
-          <p>No Video</p>
-          <button
-            onClick={handleUploadClick}
-            className='px-4 py-2 bg-neutral-300 border-2 border-neutral-500 rounded-lg hover:bg-neutral-400 cursor-pointer transition'>
-            Upload Video
-          </button>
-        </div>
-      )}
+      {videoSrc ? <VideoPlayer src={videoSrc} /> : <div>Loading Video...</div>}
     </div>
   );
 };
