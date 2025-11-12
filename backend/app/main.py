@@ -99,7 +99,7 @@ def stream_video(id: str, db: Session = Depends(get_db)):
 @app.post("/api/v1/annotations/")
 def create_annotation(annotation: dict = Body(...), db: Session = Depends(get_db)):
     try:
-        new_annotation = Annotations(id=str(uuid.uuid4()),video_id=annotation['video_id'],segments=annotation["segments"])
+        new_annotation = Annotations(id=str(uuid.uuid4()), video_id=annotation['video_id'], segments=annotation["segments"])
         db.add(new_annotation)
         db.commit()
         db.refresh(new_annotation)
