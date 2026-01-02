@@ -1,10 +1,12 @@
 import datetime
 import uuid
 
-from core.config import settings
+from app.core.config import settings
 from google.cloud import storage
+from google.oauth2 import service_account
 
-storage_client = storage.Client.from_service_account_json(settings.GOOGLE_APPLICATION_CREDENTIALS)
+credentials = service_account.Credentials.from_service_account_file(settings.GOOGLE_APPLICATION_CREDENTIALS)
+storage_client = storage.Client(credentials=credentials)
 
 def upload_video_to_gcs(video_path):
     bucket = storage_client.bucket(settings.GCS_BUCKET_NAME)
@@ -19,3 +21,8 @@ def generate_signed_url(blob_name):
     blob = bucket.blob(blob_name)
     url = blob.generate_signed_url(expiration=datetime.timedelta(hours=3), method='GET')
     return url
+
+def delete_video_from_gcs(blob_name: str) -> None:
+    bucket = storage_client.bucket(settings.GCS_BUCKET_NAME)
+    blob = bucket.blob(blob_name)
+    blob.delete()

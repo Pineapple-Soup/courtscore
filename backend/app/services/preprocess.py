@@ -8,6 +8,7 @@ from ultralytics import YOLO
 def find_first_frame(video_path, model, conf_threshold=0.5):
     capture = cv2.VideoCapture(video_path)
     found_frame = None
+    found_boxes = None
     frame_idx = 0
     while True:
         ret, frame = capture.read()
@@ -18,12 +19,13 @@ def find_first_frame(video_path, model, conf_threshold=0.5):
 
         if results and results.boxes:
             if len(results.boxes) == 6:
+                found_boxes = results.boxes.xyxy
                 found_frame = frame_idx
                 break
         frame_idx += 1
     capture.release()
     if found_frame is not None:
-        return results.boxes.xyxy, found_frame
+        return found_boxes, found_frame
     else:
         return None, None
 
@@ -49,9 +51,11 @@ def process_video(video_path, output_dir, model_path, conf_threshold=0.5, buffer
     model = YOLO(model_path)
 
     boxes, frame_idx = find_first_frame(video_path, model, conf_threshold)
+    if boxes is None or frame_idx is None:
+        raise ValueError("Failed to detect exactly 6 chambers in the video")
     capture = cv2.VideoCapture(video_path)
     fps = capture.get(cv2.CAP_PROP_FPS)
-    capture.set(cv2.CAP_PROP_POS_FRAMES, frame_idx)
+    capture.set(cv2.CAP_PROP_POS_FRAMES, float(frame_idx))
     chamber_trackers = {}
 
     ret, frame = capture.read()
@@ -78,18 +82,13 @@ def process_video(video_path, output_dir, model_path, conf_threshold=0.5, buffer
         width, height = x2 - x1, y2 - y1
         writer = cv2.VideoWriter(
             out_path,
-            cv2.VideoWriter_fourcc(*'H264'),
+            cv2.VideoWriter_fourcc(*'H264'), # type: ignore
             fps,
             (width, height)
         )
         if not writer.isOpened():
             raise ValueError(f"Failed to open video writer for {out_path}")
-        chamber_trackers[idx] = {
-            "writer": writer,
-            "path": out_path,
-            "coordinates": (x1, y1, x2, y2),
-            "size": (width, height)
-        }
+        chamber_trackers[idx] = (writer, out_path, (x1,y1,x2,y2), (width, height))
 
     while True:
         ret, frame = capture.read()
@@ -97,16 +96,16 @@ def process_video(video_path, output_dir, model_path, conf_threshold=0.5, buffer
             break
 
         for idx, tracker in chamber_trackers.items():
-            x1, y1, x2, y2 = tracker["coordinates"]
+            x1, y1, x2, y2 = tracker[2]
             crop = frame[y1:y2, x1:x2]
-            crop_resized = cv2.resize(crop, tracker["size"])
-            tracker["writer"].write(crop_resized)
+            crop_resized = cv2.resize(crop, tracker[3])
+            tracker[0].write(crop_resized)
 
     capture.release()
     result = []
     for tracker in chamber_trackers.values():
-        tracker["writer"].release()
-        result.append(tracker["path"])
+        tracker[0].release()
+        result.append(tracker[1])
     return result
 
 if __name__ == "__main__":
