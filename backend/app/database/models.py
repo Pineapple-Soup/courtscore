@@ -20,6 +20,7 @@ class Users(Base):
     role = Column(String, nullable=False, default="user")
     email = Column(String, nullable=False, unique=True, index=True)
     name = Column(String, nullable=True)
+    hashed_password = Column(String, nullable=True)
     google_sub = Column(String, unique=True, index=True, nullable=True)
     last_login_at = Column(TIMESTAMP, nullable=True)
     created_at = Column(TIMESTAMP, server_default=func.now())
