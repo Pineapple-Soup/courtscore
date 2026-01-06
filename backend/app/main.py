@@ -8,6 +8,7 @@ import uvicorn
 from app.core.config import settings
 from app.database.db import init_db, get_db
 from app.database.models import Video, Annotations, Users
+from app.database.schemas import SignupRequest, LoginRequest, SetPasswordRequest
 from app.services import auth, gcs, preprocess
 from fastapi import Body, Depends, FastAPI, File, UploadFile, HTTPException, Response, Request
 from fastapi.responses import RedirectResponse
@@ -106,9 +107,9 @@ def stream_video(id: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail=f"Failed to fetch video stream: {str(e)}")
 
 @app.post("/api/v1/annotations/")
-def create_annotation(annotation: dict = Body(...), db: Session = Depends(get_db)):
+def create_annotation(annotation: dict = Body(...), db: Session = Depends(get_db), user: Users = Depends(auth.get_current_user)):
     try:
-        new_annotation = Annotations(id=str(uuid.uuid4()), video_id=annotation['video_id'], segments=annotation["segments"])
+        new_annotation = Annotations(id=str(uuid.uuid4()), video_id=annotation['video_id'], user_id=user.id, segments=annotation["segments"])
         db.add(new_annotation)
         db.commit()
         db.refresh(new_annotation)
@@ -136,6 +137,28 @@ def get_annotation(id: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Annotation not found")
     return annotation
 
+@app.post("/auth/signup")
+def auth_signup(payload: SignupRequest, response: Response, db: Session = Depends(get_db)):
+    user = auth.create_user_with_password(email=payload.email, password=payload.password, name=payload.name, db=db)
+    token = auth.create_access_token(str(user.id))
+    auth.set_auth_cookie(response, token)
+    return {
+        "success": True,
+        "user": {"id": str(user.id), "email": str(user.email), "name": str(user.name), "role": str(user.role)}
+    }
+
+@app.post("/auth/login")
+def auth_login(payload: LoginRequest, response: Response, db: Session = Depends(get_db)):
+    user = auth.authenticate_user(email=payload.email, password=payload.password, db=db)
+    if not user:
+        raise HTTPException(status_code=401, detail="Invalid credentials. Please check your email/password and try again")
+    token = auth.create_access_token(str(user.id))
+    auth.set_auth_cookie(response, token)
+    return {
+        "success": True,
+        "user": {"id": str(user.id), "email": str(user.email), "name": str(user.name), "role": str(user.role)}
+    }
+
 @app.get("/auth/google/login")
 def auth_google_login():
     base = "https://accounts.google.com/o/oauth2/v2/auth"
@@ -157,13 +180,14 @@ def auth_google_login():
         "oauth_state",
         state,
         httponly=True,
-        secure=False # True in production
+        secure=settings.IS_PRODUCTION,
+        samesite="lax",
     )
 
     return response
 
 @app.get("/auth/google/callback")
-async def auth_google_callback(request: Request, response: Response, code: str | None = None, state: str | None = None) -> RedirectResponse:
+async def auth_google_callback(request: Request, db: Session = Depends(get_db), code: str | None = None, state: str | None = None) -> RedirectResponse:
     if not code:
         raise HTTPException(status_code=400, detail="Missing code")
     
@@ -183,12 +207,12 @@ async def auth_google_callback(request: Request, response: Response, code: str |
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Invalid id_token: {e}")
     
-    user = auth.user_from_google(id_info)
-    jwt = auth.create_access_token(str(user.id))
+    user = auth.user_from_google(id_info, db)
+    token = auth.create_access_token(str(user.id))
 
     # Set cookie
     response = RedirectResponse(settings.FRONTEND_URL + "/dashboard")
-    response.set_cookie("access_token", jwt, httponly=True)
+    auth.set_auth_cookie(response, token)
     response.delete_cookie("oauth_state")
     return response
 
@@ -199,6 +223,13 @@ def auth_me(user: Users = Depends(auth.get_current_user)) -> dict[str, str]:
 @app.post("/auth/logout")
 def auth_logout(response: Response):
     response.delete_cookie("access_token")
+    return {"success": True}
+
+@app.post("/auth/set_password")
+def auth_set_password(payload: SetPasswordRequest, user: Users = Depends(auth.get_current_user), db: Session = Depends(get_db)):
+    setattr(user, "hashed_password", auth.hash_password(payload.password))
+    db.commit()
+    db.refresh(user)
     return {"success": True}
 
 

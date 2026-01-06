@@ -8,12 +8,23 @@ from fastapi import HTTPException, Depends, Request
 from datetime import datetime, timedelta, timezone
 
 from app.core.config import settings
-from app.database.db import SessionLocal, get_db
+from app.database.db import get_db
 from app.database.models import Users
 from sqlalchemy.orm import Session
 
 ALGORITHM = "HS256"
 
+
+def set_auth_cookie(response, token: str) -> None:
+    """Set the access_token cookie with proper security attributes"""
+    response.set_cookie(
+        "access_token",
+        token,
+        httponly=True,
+        secure=settings.IS_PRODUCTION,
+        samesite="lax",
+        max_age=settings.AUTH_JWT_EXP_SECONDS,
+    )
 
 def hash_password(password: str) -> str:
     """Hash a password using bcrypt"""
@@ -21,11 +32,9 @@ def hash_password(password: str) -> str:
     hashed = bcrypt.hashpw(password.encode('utf-8'), salt)
     return hashed.decode('utf-8')
 
-
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     """Verify a password against its hash"""
     return bcrypt.checkpw(plain_password.encode('utf-8'), hashed_password.encode('utf-8'))
-
 
 def create_access_token(user_id: str, expires_in: Optional[int] = None) -> str:
     if expires_in is None:
@@ -70,30 +79,71 @@ async def exchange_code_for_tokens(code: str):
         raise HTTPException(status_code=400, detail=f"Failed to exchange code")
     return res.json()
 
-def user_from_google(id_info: Mapping) -> Users:
+def create_user_with_password(email: str, password: str, name: str, db: Session) -> Users:
+    existing = db.query(Users).filter(Users.email == email).first()
+    if existing:
+        if getattr(existing, "google_sub", None):
+            raise HTTPException(
+                status_code=409,
+                detail="An account for this email already exists. Please sign in via Google."
+            )
+        raise HTTPException(status_code=400, detail="User with that email already exists")
+    new_user = Users(id=str(uuid.uuid4()), email=email, name=name, hashed_password=hash_password(password))
+    db.add(new_user)
+    db.commit()
+    db.refresh(new_user)
+    return new_user
+
+def authenticate_user(email: str, password: str, db: Session) -> Users | None:
+    user = db.query(Users).filter(Users.email == email).first()
+    if user and getattr(user, "google_sub", None) and not getattr(user, "hashed_password", None):
+        raise HTTPException(
+            status_code=400,
+            detail="This account uses Google sign-in. Please log in with Google."
+        )
+    if not user or not getattr(user, "hashed_password", None):
+        return None
+    if verify_password(password, str(user.hashed_password)):
+        setattr(user, 'last_login_at', datetime.now(timezone.utc))
+        db.commit()
+        db.refresh(user)
+        return user
+    return None
+
+def user_from_google(id_info: Mapping, db: Session) -> Users:
     sub = id_info.get("sub")
     email = id_info.get("email")
     name = id_info.get("name")
 
-    db = SessionLocal()
-    try:
-        user = db.query(Users).filter(Users.google_sub == sub).first()
-        if user:
-            return user
-        # Email fallback
-        if email:
-            user = db.query(Users).filter(Users.email == email).first()
-            if user:
-                return user
+    if not sub:
+        raise ValueError("No Google sub")
 
-        # Create new user
-        new_user = Users(id=str(uuid.uuid4()), email=email or f"{sub}@unknown", google_sub=sub, name=name)
-        db.add(new_user)
+    user = db.query(Users).filter(Users.google_sub == sub).first()
+    if user:
+        # Update last_login_at timestamp
+        setattr(user, "last_login_at", datetime.now(timezone.utc))
         db.commit()
-        db.refresh(new_user)
-        return new_user
-    finally:
-        db.close()
+        db.refresh(user)
+        return user
+    
+    # Email fallback
+    if email:
+        user = db.query(Users).filter(Users.email == email).first()
+        if user:
+            # Link Google account and update last_login_at
+            setattr(user, "google_sub", sub)
+            setattr(user, "last_login_at", datetime.now(timezone.utc))
+            db.commit()
+            db.refresh(user)
+            return user
+
+    # Create new user
+    now = datetime.now(timezone.utc)
+    new_user = Users(id=str(uuid.uuid4()), email=email or f"{sub}@unknown", google_sub=sub, name=name, last_login_at=now)
+    db.add(new_user)
+    db.commit()
+    db.refresh(new_user)
+    return new_user
 
 def get_current_user(request: Request, db: Session = Depends(get_db)) -> Users:
     token = request.cookies.get("access_token")

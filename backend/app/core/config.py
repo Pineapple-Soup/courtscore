@@ -14,6 +14,10 @@ class Settings(BaseSettings):
     YOLO_MODEL_PATH: str
     FRONTEND_URL: str
     BACKEND_URL: str
+    
+    # Security settings
+    IS_PRODUCTION: bool = True 
+    MIN_PASSWORD_LENGTH: int = 8
 
     class Config:
         env_file = ".env"

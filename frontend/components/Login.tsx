@@ -4,11 +4,65 @@ import { useState } from "react";
 
 type LoginType = "login" | "register";
 
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+
 const Login = () => {
   const [loginType, setLoginType] = useState<LoginType>("login");
+  const [name, setName] = useState<string>("");
+  const [email, setEmail] = useState<string>("");
+  const [password, setPassword] = useState<string>("");
+  const [error, setError] = useState<string>("");
+  const [isLoading, setIsLoading] = useState<boolean>(false);
+
+  const clearForm = () => {
+    setName("");
+    setEmail("");
+    setPassword("");
+  };
 
   const googleLogin = () => {
-    window.location.href = "http://localhost:8000/auth/google/login";
+    window.location.href = `${API_URL}/auth/google/login`;
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError("");
+    setIsLoading(true);
+    try {
+      const endpoint = loginType == "login" ? "/auth/login" : "/auth/signup";
+
+      const body =
+        loginType == "login" ? { email, password } : { name, email, password };
+
+      const response = await fetch(`${API_URL}${endpoint}`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        credentials: "include",
+        body: JSON.stringify(body),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        if (response.status === 422) {
+          const message = data?.detail["0"]?.msg;
+
+          setError(message.split(",")[1].trim());
+          return;
+        }
+        throw new Error(data.detail || "Authentication failed");
+      }
+
+      window.location.href = "/dashboard";
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "An error occurred";
+      setError(message);
+    } finally {
+      setIsLoading(false);
+      clearForm();
+    }
   };
 
   return (
@@ -17,12 +71,93 @@ const Login = () => {
         <h2 className='text-2xl font-bold text-center mb-6'>
           {loginType === "login" ? "Sign In" : "Create Account"}
         </h2>
+        {/* Email/Password Form */}
+        <form onSubmit={handleSubmit} className='space-y-4'>
+          {loginType == "register" && (
+            <div>
+              <label htmlFor='name' className='text-sm mb-2'>
+                Name
+              </label>
+              <input
+                id='name'
+                type='text'
+                required
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                className='w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500'
+                placeholder='Enter your name'
+              />
+            </div>
+          )}
+
+          <div>
+            <label htmlFor='email' className='text-sm mb-2'>
+              Email
+            </label>
+            <input
+              id='email'
+              type='email'
+              required
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className='w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500'
+              placeholder='Enter your email'
+            />
+          </div>
+
+          <div>
+            <label htmlFor='password' className='text-sm mb-2'>
+              Password
+            </label>
+            <input
+              id='password'
+              type='password'
+              required
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className='w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500'
+              placeholder={
+                loginType == "login"
+                  ? "Enter your password"
+                  : "At least 8 characters"
+              }
+              minLength={loginType == "login" ? undefined : 8}
+            />
+          </div>
+
+          {error && (
+            <div
+              className={`text-sm p-2 rounded ${
+                error.includes("successful")
+                  ? "bg-green-100 text-green-700"
+                  : "bg-red-100 text-red-700"
+              }`}>
+              {error}
+            </div>
+          )}
+
+          <button
+            type='submit'
+            disabled={isLoading}
+            className='w-full px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 cursor-pointer transition-colors disabled:opacity-50 disabled:cursor-not-allowed'>
+            {isLoading
+              ? "Loading..."
+              : loginType == "login"
+              ? "Sign In"
+              : "Sign Up"}
+          </button>
+        </form>
+
+        {/* Divider */}
+        <div className='relative flex items-center my-6'>
+          <div className='w-full border-t border-gray-300'></div>
+        </div>
 
         {/* Google OAuth Button */}
         <button
           type='button'
           onClick={googleLogin}
-          className='w-full px-4 py-2 border border-gray-300 text-gray-700 rounded-full hover:bg-gray-50 transition-colors flex items-center justify-center gap-2 cursor-pointer'
+          className='w-full px-4 py-2 border border-gray-300 rounded-full transition-colors flex items-center justify-center gap-2 cursor-pointer'
           aria-label='Sign in with Google'>
           <svg className='w-5 h-5' viewBox='0 0 24 24'>
             <path
@@ -54,6 +189,7 @@ const Login = () => {
                 type='button'
                 onClick={() => {
                   setLoginType("register");
+                  setError("");
                 }}
                 className='text-blue-600 hover:underline font-medium cursor-pointer'>
                 Sign up
@@ -66,6 +202,7 @@ const Login = () => {
                 type='button'
                 onClick={() => {
                   setLoginType("login");
+                  setError("");
                 }}
                 className='text-blue-600 hover:underline font-medium cursor-pointer'>
                 Sign in
