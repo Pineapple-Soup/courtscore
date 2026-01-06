@@ -8,9 +8,14 @@ import uvicorn
 from app.core.config import settings
 from app.database.db import init_db, get_db
 from app.database.models import Video, Annotations, Users
-from app.database.schemas import SignupRequest, LoginRequest, SetPasswordRequest
+from app.database.schemas import (
+    SignupRequest, LoginRequest, SetPasswordRequest,
+    VideoUpdateRequest, VideoResponse, SignedUrlResponse,
+    AnnotationCreateRequest, AnnotationUpdateRequest, AnnotationResponse,
+    UserResponse
+)
 from app.services import auth, gcs, preprocess
-from fastapi import Body, Depends, FastAPI, File, UploadFile, HTTPException, Response, Request
+from fastapi import Depends, FastAPI, File, UploadFile, HTTPException, Response, Request
 from fastapi.responses import RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
 from google.oauth2 import id_token as google_id_token
@@ -73,15 +78,15 @@ def list_videos(db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail=f"Failed to fetch videos: {str(e)}")
 
 @app.put("/api/v1/videos/{id}")
-def update_video(id: str, video: dict = Body(...), db: Session = Depends(get_db)):
+def update_video(id: str, video: VideoUpdateRequest, db: Session = Depends(get_db)):
     existing_video = db.query(Video).filter(Video.id == id).first()
     if not existing_video:
         raise HTTPException(status_code=404, detail="Video not found")
     try:
-        existing_video.status = video['status']
+        setattr(existing_video, "status", video.status.value)
         db.commit()
         db.refresh(existing_video)
-        return {"success": True, "video": existing_video}
+        return {"success": True, "video": VideoResponse.model_validate(existing_video)}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -95,47 +100,48 @@ def get_video(id: str, db: Session = Depends(get_db)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to fetch video: {str(e)}")
 
-@app.get("/api/v1/videos/{id}/url")
+@app.get("/api/v1/videos/{id}/url", response_model=SignedUrlResponse)
 def stream_video(id: str, db: Session = Depends(get_db)):
     try:
         video = db.query(Video).filter(Video.id == id).first()
         if not video:
             raise HTTPException(status_code=404, detail="Video not found")
         signed_url = gcs.generate_signed_url(video.src)
-        return {"signed_url": signed_url, "expiration": 3}
+        return SignedUrlResponse(signed_url=signed_url, expiration=3)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to fetch video stream: {str(e)}")
 
 @app.post("/api/v1/annotations/")
-def create_annotation(annotation: dict = Body(...), db: Session = Depends(get_db), user: Users = Depends(auth.get_current_user)):
+def create_annotation(annotation: AnnotationCreateRequest, db: Session = Depends(get_db), user: Users = Depends(auth.get_current_user)):
     try:
-        new_annotation = Annotations(id=str(uuid.uuid4()), video_id=annotation['video_id'], user_id=user.id, segments=annotation["segments"])
+        segments_data = [seg.model_dump() for seg in annotation.segments]
+        new_annotation = Annotations(id=str(uuid.uuid4()), video_id=annotation.video_id, user_id=user.id, segments=segments_data)
         db.add(new_annotation)
         db.commit()
         db.refresh(new_annotation)
-        return {"success": True, "annotation": new_annotation}
+        return {"success": True, "annotation": AnnotationResponse.model_validate(new_annotation)}
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
     
 @app.put("/api/v1/annotations/{id}")
-def update_annotation(id: str, annotation: dict = Body(...), db: Session = Depends(get_db)):
+def update_annotation(id: str, annotation: AnnotationUpdateRequest, db: Session = Depends(get_db)):
     existing_annotation = db.query(Annotations).filter(Annotations.video_id == id).first()
     if not existing_annotation:
         raise HTTPException(status_code=404, detail="Annotation not found")
     try:
-        existing_annotation.segments = annotation['segments']
+        setattr(existing_annotation, "segments", [seg.model_dump() for seg in annotation.segments])
         db.commit()
         db.refresh(existing_annotation)
-        return {"success": True, "annotation": existing_annotation}
+        return {"success": True, "annotation": AnnotationResponse.model_validate(existing_annotation)}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
     
-@app.get("/api/v1/annotations/{id}")
+@app.get("/api/v1/annotations/{id}", response_model=AnnotationResponse)
 def get_annotation(id: str, db: Session = Depends(get_db)):
     annotation = db.query(Annotations).filter(Annotations.video_id == id).first()
     if not annotation:
         raise HTTPException(status_code=404, detail="Annotation not found")
-    return annotation
+    return AnnotationResponse.model_validate(annotation)
 
 @app.post("/auth/signup")
 def auth_signup(payload: SignupRequest, response: Response, db: Session = Depends(get_db)):
@@ -216,9 +222,9 @@ async def auth_google_callback(request: Request, db: Session = Depends(get_db), 
     response.delete_cookie("oauth_state")
     return response
 
-@app.get("/auth/me")
-def auth_me(user: Users = Depends(auth.get_current_user)) -> dict[str, str]:
-    return {"id": str(user.id), "email": str(user.email), "name": str(user.name), "role": str(user.role)}
+@app.get("/auth/me", response_model=UserResponse)
+def auth_me(user: Users = Depends(auth.get_current_user)) -> UserResponse:
+    return UserResponse.model_validate(user)
 
 @app.post("/auth/logout")
 def auth_logout(response: Response):
