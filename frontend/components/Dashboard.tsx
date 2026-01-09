@@ -41,9 +41,10 @@ const Dashboard = () => {
       setIsUploading(true);
       setShowModal(true);
       try {
-        const res = await fetch("http://localhost:8000/api/v1/upload_video", {
+        const res = await fetch("http://localhost:8000/api/v1/videos/upload", {
           method: "POST",
           body: formData,
+          credentials: "include",
         });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         fetchVideos();

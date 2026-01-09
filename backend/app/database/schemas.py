@@ -6,8 +6,6 @@ from typing import Self
 from app.core.config import settings
 
 
-# ---------- Enums ----------
-
 class BehaviorEnum(int, Enum):
     ORIENTING = 1
     FOLLOWING = 2
@@ -24,8 +22,7 @@ class VideoStatusEnum(str, Enum):
     COMPLETE = "Complete"
 
 
-# ---------- Nested Schemas ----------
-
+# Segment
 class SegmentSchema(BaseModel):
     behavior: BehaviorEnum
     startTime: float
@@ -39,7 +36,7 @@ class SegmentSchema(BaseModel):
         return self
 
 
-# ---------- Auth Schemas ----------
+# Auth
 
 class LoginRequest(BaseModel):
     email: EmailStr
@@ -79,9 +76,12 @@ class SignupRequest(BaseModel):
             raise ValueError("Password must contain at least one digit")
         return v
 
+class AuthResponse(BaseModel):
+    success: bool
+    user: UserResponse
 
-# ---------- Video Schemas ----------
 
+# Video
 class VideoUpdateRequest(BaseModel):
     status: VideoStatusEnum
 
@@ -97,16 +97,14 @@ class VideoResponse(BaseModel):
     created_at: datetime | None = None
 
 
-# ---------- Annotation Schemas ----------
+# Annotation
 
 class AnnotationCreateRequest(BaseModel):
     video_id: str
     segments: list[SegmentSchema] = []
 
-
 class AnnotationUpdateRequest(BaseModel):
     segments: list[SegmentSchema] = []
-
 
 class AnnotationResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -117,8 +115,7 @@ class AnnotationResponse(BaseModel):
     segments: list[SegmentSchema]
 
 
-# ---------- User Response Schemas ----------
-
+# User Response
 class UserResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -128,8 +125,11 @@ class UserResponse(BaseModel):
     role: str
 
 
-# ---------- Misc Response Schemas ----------
-
+# Misc
 class SignedUrlResponse(BaseModel):
     signed_url: str
     expiration: int
+
+class HealthResponse(BaseModel):
+    status: str
+    database: str

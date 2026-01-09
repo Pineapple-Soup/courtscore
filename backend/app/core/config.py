@@ -18,6 +18,7 @@ class Settings(BaseSettings):
     # Security settings
     IS_PRODUCTION: bool = True 
     MIN_PASSWORD_LENGTH: int = 8
+    ALLOWED_ORIGINS: list[str] = ["http://localhost:3000"]
 
     class Config:
         env_file = ".env"

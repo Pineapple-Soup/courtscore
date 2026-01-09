@@ -36,7 +36,8 @@ const ControlPanel = () => {
     const fetchAnnotationInfo = async () => {
       try {
         const res = await fetch(
-          `http://localhost:8000/api/v1/annotations/${videoId}`
+          `http://localhost:8000/api/v1/annotations/${videoId}`,
+          { credentials: "include" }
         );
         if (res.ok) {
           const data = await res.json();
@@ -118,7 +119,8 @@ const ControlPanel = () => {
     const checkAnnotation = async () => {
       try {
         const res = await fetch(
-          `http://localhost:8000/api/v1/annotations/${videoId}`
+          `http://localhost:8000/api/v1/annotations/${videoId}`,
+          { credentials: "include" }
         );
         if (res.ok) {
           return await res.json();
@@ -135,10 +137,11 @@ const ControlPanel = () => {
 
     const createAnnotation = async () => {
       try {
-        const res = await fetch(`http://localhost:8000/api/v1/annotations/`, {
+        const res = await fetch(`http://localhost:8000/api/v1/annotations`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(annotationData),
+          credentials: "include",
         });
         if (res.ok) {
           return await res.json();
@@ -159,6 +162,7 @@ const ControlPanel = () => {
             method: "PUT",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(annotationData),
+            credentials: "include",
           }
         );
         if (res.ok) {

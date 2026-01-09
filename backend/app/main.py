@@ -1,242 +1,52 @@
 import os
-import secrets
-import shutil
-import urllib.parse
-import uuid
 import uvicorn
 
-from app.core.config import settings
-from app.database.db import init_db, get_db
-from app.database.models import Video, Annotations, Users
-from app.database.schemas import (
-    SignupRequest, LoginRequest, SetPasswordRequest,
-    VideoUpdateRequest, VideoResponse, SignedUrlResponse,
-    AnnotationCreateRequest, AnnotationUpdateRequest, AnnotationResponse,
-    UserResponse
-)
-from app.services import auth, gcs, preprocess
-from fastapi import Depends, FastAPI, File, UploadFile, HTTPException, Response, Request
-from fastapi.responses import RedirectResponse
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from google.oauth2 import id_token as google_id_token
-from google.auth.transport import requests as google_requests
-from sqlalchemy.orm import Session
 
-app = FastAPI()
+from app.core.config import settings
+from app.core.exceptions import (
+    VideoNotFoundError,
+    AnnotationNotFoundError,
+    ProcessingError,
+    GCSError,
+    video_not_found_handler,
+    annotation_not_found_handler,
+    processing_error_handler,
+    gcs_error_handler,
+)
+from app.database.db import init_db
+from app.api.v1.router import api_router, auth_router, health_router
+
+
+app = FastAPI(title="CourtScore API", version="1.0.0")
+
+# Initialize database
 init_db()
 
-# Dev CORS settings
+# CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=settings.ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
+# Register exception handlers
+app.add_exception_handler(VideoNotFoundError, video_not_found_handler)
+app.add_exception_handler(AnnotationNotFoundError, annotation_not_found_handler)
+app.add_exception_handler(ProcessingError, processing_error_handler)
+app.add_exception_handler(GCSError, gcs_error_handler)
+
+# Create required directories
 os.makedirs(settings.UPLOAD_DIRECTORY, exist_ok=True)
 os.makedirs(settings.OUTPUT_PATH, exist_ok=True)
 
-@app.post("/api/v1/upload_video", status_code=201)
-def upload_file(file: UploadFile = File(...), db: Session = Depends(get_db)):
-    try:
-        # Ensure filename is a non-None string and sanitize it to avoid path issues
-        if not file.filename:
-            raise FileNotFoundError
-        safe_filename = os.path.basename(file.filename)
-        file_location = os.path.join(settings.UPLOAD_DIRECTORY, safe_filename)
-        with open(file_location, "wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
-
-        model_path = settings.YOLO_MODEL_PATH
-        if not model_path:
-            raise HTTPException(status_code=500, detail="YOLO_MODEL_PATH environment variable not set")
-        processed_files = preprocess.process_video(file_location, settings.OUTPUT_PATH, model_path)
-        for processed_file in processed_files:
-            video_id, gcp_path = gcs.upload_video_to_gcs(processed_file)
-            new_video = Video(id=video_id, src=gcp_path, label=os.path.splitext(os.path.basename(processed_file))[0])
-            print("Created Video")
-            db.add(new_video)
-            db.commit()
-            db.refresh(new_video)
-
-        # Cleanup files
-        for processed_file in processed_files:
-            os.remove(processed_file)
-        os.remove(file_location)
-
-        return
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
-
-@app.get("/api/v1/videos")
-def list_videos(db: Session = Depends(get_db)):
-    try:
-        db_videos = db.query(Video).all()
-        return db_videos
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to fetch videos: {str(e)}")
-
-@app.put("/api/v1/videos/{id}")
-def update_video(id: str, video: VideoUpdateRequest, db: Session = Depends(get_db)):
-    existing_video = db.query(Video).filter(Video.id == id).first()
-    if not existing_video:
-        raise HTTPException(status_code=404, detail="Video not found")
-    try:
-        setattr(existing_video, "status", video.status.value)
-        db.commit()
-        db.refresh(existing_video)
-        return {"success": True, "video": VideoResponse.model_validate(existing_video)}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.get("/api/v1/videos/{id}")
-def get_video(id: str, db: Session = Depends(get_db)):
-    try:
-        video = db.query(Video).filter(Video.id == id).first()
-        if not video:
-            raise HTTPException(status_code=404, detail="Video not found")
-        return video
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to fetch video: {str(e)}")
-
-@app.get("/api/v1/videos/{id}/url", response_model=SignedUrlResponse)
-def stream_video(id: str, db: Session = Depends(get_db)):
-    try:
-        video = db.query(Video).filter(Video.id == id).first()
-        if not video:
-            raise HTTPException(status_code=404, detail="Video not found")
-        signed_url = gcs.generate_signed_url(video.src)
-        return SignedUrlResponse(signed_url=signed_url, expiration=3)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to fetch video stream: {str(e)}")
-
-@app.post("/api/v1/annotations/")
-def create_annotation(annotation: AnnotationCreateRequest, db: Session = Depends(get_db), user: Users = Depends(auth.get_current_user)):
-    try:
-        segments_data = [seg.model_dump() for seg in annotation.segments]
-        new_annotation = Annotations(id=str(uuid.uuid4()), video_id=annotation.video_id, user_id=user.id, segments=segments_data)
-        db.add(new_annotation)
-        db.commit()
-        db.refresh(new_annotation)
-        return {"success": True, "annotation": AnnotationResponse.model_validate(new_annotation)}
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    
-@app.put("/api/v1/annotations/{id}")
-def update_annotation(id: str, annotation: AnnotationUpdateRequest, db: Session = Depends(get_db)):
-    existing_annotation = db.query(Annotations).filter(Annotations.video_id == id).first()
-    if not existing_annotation:
-        raise HTTPException(status_code=404, detail="Annotation not found")
-    try:
-        setattr(existing_annotation, "segments", [seg.model_dump() for seg in annotation.segments])
-        db.commit()
-        db.refresh(existing_annotation)
-        return {"success": True, "annotation": AnnotationResponse.model_validate(existing_annotation)}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-    
-@app.get("/api/v1/annotations/{id}", response_model=AnnotationResponse)
-def get_annotation(id: str, db: Session = Depends(get_db)):
-    annotation = db.query(Annotations).filter(Annotations.video_id == id).first()
-    if not annotation:
-        raise HTTPException(status_code=404, detail="Annotation not found")
-    return AnnotationResponse.model_validate(annotation)
-
-@app.post("/auth/signup")
-def auth_signup(payload: SignupRequest, response: Response, db: Session = Depends(get_db)):
-    user = auth.create_user_with_password(email=payload.email, password=payload.password, name=payload.name, db=db)
-    token = auth.create_access_token(str(user.id))
-    auth.set_auth_cookie(response, token)
-    return {
-        "success": True,
-        "user": {"id": str(user.id), "email": str(user.email), "name": str(user.name), "role": str(user.role)}
-    }
-
-@app.post("/auth/login")
-def auth_login(payload: LoginRequest, response: Response, db: Session = Depends(get_db)):
-    user = auth.authenticate_user(email=payload.email, password=payload.password, db=db)
-    if not user:
-        raise HTTPException(status_code=401, detail="Invalid credentials. Please check your email/password and try again")
-    token = auth.create_access_token(str(user.id))
-    auth.set_auth_cookie(response, token)
-    return {
-        "success": True,
-        "user": {"id": str(user.id), "email": str(user.email), "name": str(user.name), "role": str(user.role)}
-    }
-
-@app.get("/auth/google/login")
-def auth_google_login():
-    base = "https://accounts.google.com/o/oauth2/v2/auth"
-    state = secrets.token_urlsafe(32)
-    params = {
-        "client_id": settings.AUTH_GOOGLE_ID,
-        "redirect_uri": settings.AUTH_REDIRECT_URI,
-        "response_type": "code",
-        "scope": "openid email profile",
-        "access_type": "offline",
-        "prompt": "consent",
-        "state": state
-    }
-
-    url = f"{base}?{urllib.parse.urlencode(params)}"
-
-    response = RedirectResponse(url)
-    response.set_cookie(
-        "oauth_state",
-        state,
-        httponly=True,
-        secure=settings.IS_PRODUCTION,
-        samesite="lax",
-    )
-
-    return response
-
-@app.get("/auth/google/callback")
-async def auth_google_callback(request: Request, db: Session = Depends(get_db), code: str | None = None, state: str | None = None) -> RedirectResponse:
-    if not code:
-        raise HTTPException(status_code=400, detail="Missing code")
-    
-    stored_state = request.cookies.get("oauth_state")
-    if not stored_state or stored_state != state:
-        raise HTTPException(status_code=400, detail="Invalid OAuth state")
-    
-    # Exchange code for tokens
-    token_response = await auth.exchange_code_for_tokens(code)
-    id_token_str = token_response.get("id_token")
-    if not id_token_str:
-        raise HTTPException(status_code=400, detail="No id_token returned from provider")
-
-    # Verify id_token locally
-    try:
-        id_info = google_id_token.verify_oauth2_token(id_token_str, google_requests.Request(), settings.AUTH_GOOGLE_ID)
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Invalid id_token: {e}")
-    
-    user = auth.user_from_google(id_info, db)
-    token = auth.create_access_token(str(user.id))
-
-    # Set cookie
-    response = RedirectResponse(settings.FRONTEND_URL + "/dashboard")
-    auth.set_auth_cookie(response, token)
-    response.delete_cookie("oauth_state")
-    return response
-
-@app.get("/auth/me", response_model=UserResponse)
-def auth_me(user: Users = Depends(auth.get_current_user)) -> UserResponse:
-    return UserResponse.model_validate(user)
-
-@app.post("/auth/logout")
-def auth_logout(response: Response):
-    response.delete_cookie("access_token")
-    return {"success": True}
-
-@app.post("/auth/set_password")
-def auth_set_password(payload: SetPasswordRequest, user: Users = Depends(auth.get_current_user), db: Session = Depends(get_db)):
-    setattr(user, "hashed_password", auth.hash_password(payload.password))
-    db.commit()
-    db.refresh(user)
-    return {"success": True}
+# Include routers
+app.include_router(api_router)
+app.include_router(auth_router)
+app.include_router(health_router)
 
 
 if __name__ == "__main__":
