@@ -76,6 +76,14 @@ class SignupRequest(BaseModel):
             raise ValueError("Password must contain at least one digit")
         return v
 
+class UserResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    email: str
+    name: str | None = None
+    role: str
+
 class AuthResponse(BaseModel):
     success: bool
     user: UserResponse
@@ -113,16 +121,6 @@ class AnnotationResponse(BaseModel):
     video_id: str
     user_id: str
     segments: list[SegmentSchema]
-
-
-# User Response
-class UserResponse(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    id: str
-    email: str
-    name: str | None = None
-    role: str
 
 
 # Misc
