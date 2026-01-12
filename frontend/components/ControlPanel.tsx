@@ -144,7 +144,8 @@ const ControlPanel = () => {
           credentials: "include",
         });
         if (res.ok) {
-          return await res.json();
+          const data = await res.json();
+          setSegments(data.segments);
         } else {
           throw new Error("Failed to create annotation");
         }
@@ -166,7 +167,8 @@ const ControlPanel = () => {
           }
         );
         if (res.ok) {
-          return await res.json();
+          const data = await res.json();
+          setSegments(data.segments);
         } else {
           throw new Error("Failed to update annotation");
         }
@@ -181,20 +183,21 @@ const ControlPanel = () => {
         if (!videoInfo) return;
         const status =
           !segments || segments.length === 0 ? "Not Started" : "In Progress";
-        const updatedVideo: Video = { ...videoInfo, status };
 
         const res = await fetch(
           `http://localhost:8000/api/v1/videos/${videoId}`,
           {
             method: "PUT",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(updatedVideo),
+            body: JSON.stringify({ status: status }),
+            credentials: "include",
           }
         );
 
         if (res.ok) {
-          setVideoInfo(updatedVideo);
-          return await res.json();
+          const data = await res.json();
+          setVideoInfo(data);
+          console.log(data);
         } else {
           throw new Error("Failed to update video status");
         }
