@@ -4,7 +4,7 @@ import bcrypt
 
 from typing import Mapping, Optional, Callable
 from jose import jwt, JWTError
-from fastapi import HTTPException, Depends, Request
+from fastapi import HTTPException, Depends, Response, Request
 from datetime import datetime, timedelta, timezone
 
 from app.core.config import settings
@@ -15,14 +15,14 @@ from sqlalchemy.orm import Session
 ALGORITHM = "HS256"
 
 
-def set_auth_cookie(response, token: str) -> None:
+def set_auth_cookie(response: Response, token: str) -> None:
     """Set the access_token cookie with proper security attributes"""
     response.set_cookie(
         "access_token",
         token,
         httponly=True,
         secure=settings.IS_PRODUCTION,
-        samesite="lax",
+        samesite="none" if settings.IS_PRODUCTION else "lax",
         max_age=settings.AUTH_JWT_EXP_SECONDS,
     )
 
