@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useAnnotationStore } from "@/store/useAnnotationStore";
 import { Behavior } from "@/types/behavior";
-import { Video } from "@/types/video";
+import { Video, VideoStatus } from "@/types/video";
 import ResetModal from "@/components/ResetModal";
 
 const ControlPanel = () => {
@@ -181,8 +181,10 @@ const ControlPanel = () => {
     const updateVideoStatus = async () => {
       try {
         if (!videoInfo) return;
-        const status =
-          !segments || segments.length === 0 ? "Not Started" : "In Progress";
+        const status: VideoStatus =
+          !segments || segments.length === 0
+            ? VideoStatus.NOT_STARTED
+            : VideoStatus.IN_PROGRESS;
 
         const res = await fetch(
           `http://localhost:8000/api/v1/videos/${videoId}`,
@@ -219,6 +221,8 @@ const ControlPanel = () => {
       console.error("Failed to save annotation", err);
     }
   };
+
+  // TODO: function for handling submission logic
 
   return (
     <div className='grid grid-rows-2 grid-cols-2 gap-4'>

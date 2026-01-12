@@ -18,8 +18,8 @@ class BehaviorEnum(int, Enum):
 
 class VideoStatusEnum(str, Enum):
     NOT_STARTED = "Not Started"
-    ACTIVE = "Active"
-    COMPLETE = "Complete"
+    IN_PROGRESS = "In Progress"
+    COMPLETED = "Completed"
 
 
 # Segment
@@ -37,7 +37,6 @@ class SegmentSchema(BaseModel):
 
 
 # Auth
-
 class LoginRequest(BaseModel):
     email: EmailStr
     password: str

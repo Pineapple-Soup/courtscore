@@ -1,7 +1,6 @@
 import { create } from "zustand";
-import { Behavior } from "@/types/behavior";
+import { Behavior, BehaviorStatus } from "@/types/behavior";
 import { Segment } from "@/types/segment";
-import { Status } from "@/types/status";
 
 interface AnnotationState {
   videoId: string;
@@ -17,7 +16,7 @@ interface AnnotationState {
   mergeSegments: (segments: Segment[], newSegment: Segment) => Segment[];
   startBehavior: (behavior: Behavior, time: number) => void;
   endBehavior: (behavior: Behavior, time: number) => void;
-  getStatus: (behavior: Behavior) => Status;
+  getBehaviorStatus: (behavior: Behavior) => BehaviorStatus;
   getActiveBehaviors: (time: number) => Behavior[];
   clearInProgress: () => void;
 }
@@ -132,7 +131,7 @@ export const useAnnotationStore = create<AnnotationState>((set, get) => ({
     });
   },
 
-  getStatus: (behavior: Behavior): Status => {
+  getBehaviorStatus: (behavior: Behavior): BehaviorStatus => {
     const { segments, currentTime } = get();
 
     const relevantSegments = segments.filter(
@@ -145,7 +144,7 @@ export const useAnnotationStore = create<AnnotationState>((set, get) => ({
           segment.endTime === null && segment.startTime <= currentTime
       )
     ) {
-      return Status.ACTIVE;
+      return BehaviorStatus.ACTIVE;
     }
 
     if (
@@ -156,10 +155,10 @@ export const useAnnotationStore = create<AnnotationState>((set, get) => ({
           segment.endTime! >= currentTime
       )
     ) {
-      return Status.COMPLETE;
+      return BehaviorStatus.COMPLETE;
     }
 
-    return Status.EMPTY;
+    return BehaviorStatus.EMPTY;
   },
 
   getActiveBehaviors: (time: number): Behavior[] => {

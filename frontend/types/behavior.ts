@@ -13,3 +13,9 @@ export interface DurationBehavior {
   title: string;
   description?: string;
 }
+
+export enum BehaviorStatus {
+  EMPTY,
+  ACTIVE,
+  COMPLETE,
+}

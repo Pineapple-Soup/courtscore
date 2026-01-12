@@ -2,9 +2,8 @@
 
 import { useState } from "react";
 import { useAnnotationStore } from "@/store/useAnnotationStore";
-import { Behavior } from "@/types/behavior";
+import { Behavior, BehaviorStatus } from "@/types/behavior";
 import { Segment } from "@/types/segment";
-import { Status } from "@/types/status";
 import Modal from "@/components/Modal";
 
 interface SegmentModalProps {
@@ -18,7 +17,7 @@ const SegmentModal = ({ segment, onClose }: SegmentModalProps) => {
   const isPlaying = useAnnotationStore((s) => s.isPlaying);
   const setSegments = useAnnotationStore((s) => s.setSegments);
   const mergeSegments = useAnnotationStore((s) => s.mergeSegments);
-  const getStatus = useAnnotationStore((s) => s.getStatus);
+  const getBehaviorStatus = useAnnotationStore((s) => s.getBehaviorStatus);
   const [notes, setNotes] = useState<string>(segment.notes || "");
   const [startTime, setStartTime] = useState<number>(segment.startTime);
   const [endTime, setEndTime] = useState<number | null>(segment.endTime);
@@ -48,7 +47,7 @@ const SegmentModal = ({ segment, onClose }: SegmentModalProps) => {
     if (
       endTime === null &&
       segment.endTime !== null &&
-      getStatus(segment.behavior) === Status.ACTIVE
+      getBehaviorStatus(segment.behavior) === BehaviorStatus.ACTIVE
     ) {
       alert(
         `Existing ${
