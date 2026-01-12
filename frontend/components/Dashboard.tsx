@@ -84,7 +84,11 @@ const Dashboard = () => {
         </div>
       </div>
       {showModal && (
-        <Modal title='Uploading...' onClose={() => setShowModal(false)}>
+        <Modal
+          title='Uploading...'
+          onClose={() => {
+            if (!isUploading) setShowModal(false);
+          }}>
           {isUploading ? (
             <div>Upload in Progress</div>
           ) : (
