@@ -61,12 +61,12 @@ class PreprocessService():
         else:
             return None, None
     
-    def _initialize_chamber_videos(self, file_name: str, boxes, frame, fps, boundary_buffer: int = 100) -> list[ChamberVideo]:
+    def _initialize_chamber_videos(self, file_name: str, boxes, frame, fps, boundary_buffer: int = 100, output_dir: str = "tmp/out") -> list[ChamberVideo]:
         chamber_videos: list[ChamberVideo] = []
         frame_height, frame_width = frame.shape[:2]
         
-        for idx, box in boxes:
-            x1, x2, y1, y2 = map(int, box.tolist())
+        for idx, box in enumerate(boxes):
+            x1, y1, x2, y2 = map(int, box.tolist())
             x1 = max(0, x1 - boundary_buffer)
             y1 = max(0, y1 - boundary_buffer)
             x2 = min(frame_width, x2 + boundary_buffer)
@@ -74,15 +74,23 @@ class PreprocessService():
         
             out_path = os.path.join(output_dir, f"{file_name}_chamber_{idx}.mp4")
             bounding_box = Box(x1, y1, x2, y2)
-            writer = cv2.VideoWriter(
-                out_path,
-                cv2.VideoWriter_fourcc(*'H264'), # type: ignore
-                fps,
-                (bounding_box.width(), bounding_box.height())
-            )
-
-            if not writer.isOpened():
-                raise ValueError(f"Failed to open video writer for {out_path}")
+            if bounding_box.width() <= 0 or bounding_box.height() <= 0:
+                raise ValueError(f"Invalid boudning box dimensions for {out_path}: {bounding_box}")
+            
+            codecs = ['avc1', 'H264', 'mp4v', 'XVID']
+            writer = None
+            for codec in codecs:
+                writer = cv2.VideoWriter(
+                    out_path,
+                    cv2.VideoWriter_fourcc(*codec), # type: ignore
+                    fps,
+                    (bounding_box.width(), bounding_box.height())
+                )
+                if writer.isOpened():
+                    break
+                writer.release()
+            if writer is None or not writer.isOpened():
+                    raise ValueError(f"Failed to open video writer for {out_path}. Tried codecs: {codecs}")
 
             chamber_videos.append(ChamberVideo(writer, out_path, bounding_box))
 
@@ -143,7 +151,7 @@ class PreprocessService():
         
         file_name = os.path.splitext(os.path.basename(video_path))[0]
         fps = capture.get(cv2.CAP_PROP_FPS)
-        trackers = self._initialize_chamber_videos(file_name, boxes, frame, fps, buffer)
+        trackers = self._initialize_chamber_videos(file_name, boxes, frame, fps, buffer, output_dir)
         self._write_chamber_videos(capture, trackers)
         result = self._save_chamber_videos(trackers)
         capture.release()
