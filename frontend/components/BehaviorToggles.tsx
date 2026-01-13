@@ -2,15 +2,14 @@
 
 import { useCallback, useEffect } from "react";
 import { useAnnotationStore } from "@/store/useAnnotationStore";
-import { Behavior } from "@/types/behavior";
-import { Status } from "@/types/status";
+import { Behavior, BehaviorStatus } from "@/types/behavior";
 
 const BehaviorToggles = () => {
   const currentTime = useAnnotationStore((s) => s.currentTime);
   const segments = useAnnotationStore((s) => s.segments);
   const startBehavior = useAnnotationStore((s) => s.startBehavior);
   const endBehavior = useAnnotationStore((s) => s.endBehavior);
-  const getStatus = useAnnotationStore((s) => s.getStatus);
+  const getBehaviorStatus = useAnnotationStore((s) => s.getBehaviorStatus);
 
   const toggleBehavior = useCallback(
     (behavior: Behavior) => {
@@ -51,11 +50,13 @@ const BehaviorToggles = () => {
               <p>[{id}]</p>
               <button
                 onClick={() => toggleBehavior(id as Behavior)}
-                disabled={getStatus(id as Behavior) === Status.COMPLETE}
+                disabled={
+                  getBehaviorStatus(id as Behavior) === BehaviorStatus.COMPLETE
+                }
                 className={`flex items-center justify-center w-full h-8 border-2 border-neutral-500 rounded-lg cursor-pointer ${
-                  getStatus(id as Behavior) === Status.ACTIVE
+                  getBehaviorStatus(id as Behavior) === BehaviorStatus.ACTIVE
                     ? "bg-blue-500 text-white"
-                    : getStatus(id as Behavior) === Status.EMPTY
+                    : getBehaviorStatus(id as Behavior) === BehaviorStatus.EMPTY
                     ? "bg-white"
                     : "bg-gray-500 !cursor-not-allowed"
                 }`}>

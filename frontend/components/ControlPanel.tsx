@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useAnnotationStore } from "@/store/useAnnotationStore";
 import { Behavior } from "@/types/behavior";
-import { Video } from "@/types/video";
+import { Video, VideoStatus } from "@/types/video";
 import ResetModal from "@/components/ResetModal";
 
 const ControlPanel = () => {
@@ -36,7 +36,8 @@ const ControlPanel = () => {
     const fetchAnnotationInfo = async () => {
       try {
         const res = await fetch(
-          `http://localhost:8000/api/v1/annotations/${videoId}`
+          `http://localhost:8000/api/v1/annotations/${videoId}`,
+          { credentials: "include" }
         );
         if (res.ok) {
           const data = await res.json();
@@ -118,7 +119,8 @@ const ControlPanel = () => {
     const checkAnnotation = async () => {
       try {
         const res = await fetch(
-          `http://localhost:8000/api/v1/annotations/${videoId}`
+          `http://localhost:8000/api/v1/annotations/${videoId}`,
+          { credentials: "include" }
         );
         if (res.ok) {
           return await res.json();
@@ -135,13 +137,15 @@ const ControlPanel = () => {
 
     const createAnnotation = async () => {
       try {
-        const res = await fetch(`http://localhost:8000/api/v1/annotations/`, {
+        const res = await fetch(`http://localhost:8000/api/v1/annotations`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(annotationData),
+          credentials: "include",
         });
         if (res.ok) {
-          return await res.json();
+          const data = await res.json();
+          setSegments(data.segments);
         } else {
           throw new Error("Failed to create annotation");
         }
@@ -159,10 +163,12 @@ const ControlPanel = () => {
             method: "PUT",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(annotationData),
+            credentials: "include",
           }
         );
         if (res.ok) {
-          return await res.json();
+          const data = await res.json();
+          setSegments(data.segments);
         } else {
           throw new Error("Failed to update annotation");
         }
@@ -175,22 +181,25 @@ const ControlPanel = () => {
     const updateVideoStatus = async () => {
       try {
         if (!videoInfo) return;
-        const status =
-          !segments || segments.length === 0 ? "Not Started" : "In Progress";
-        const updatedVideo: Video = { ...videoInfo, status };
+        const status: VideoStatus =
+          !segments || segments.length === 0
+            ? VideoStatus.NOT_STARTED
+            : VideoStatus.IN_PROGRESS;
 
         const res = await fetch(
           `http://localhost:8000/api/v1/videos/${videoId}`,
           {
             method: "PUT",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(updatedVideo),
+            body: JSON.stringify({ status: status }),
+            credentials: "include",
           }
         );
 
         if (res.ok) {
-          setVideoInfo(updatedVideo);
-          return await res.json();
+          const data = await res.json();
+          setVideoInfo(data);
+          console.log(data);
         } else {
           throw new Error("Failed to update video status");
         }
@@ -212,6 +221,8 @@ const ControlPanel = () => {
       console.error("Failed to save annotation", err);
     }
   };
+
+  // TODO: function for handling submission logic
 
   return (
     <div className='grid grid-rows-2 grid-cols-2 gap-4'>

@@ -1,12 +1,14 @@
 "use client";
 
 import { useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { useVideoStore } from "@/store/useVideoStore";
-import { Upload } from "lucide-react";
+import { Upload, LogOut } from "lucide-react";
 import VideoList from "@/components/VideoList";
 import Modal from "@/components/Modal";
 
 const Dashboard = () => {
+  const router = useRouter();
   const fetchVideos = useVideoStore((s) => s.fetchVideos);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -15,6 +17,18 @@ const Dashboard = () => {
 
   const handleUploadClick = () => {
     fileInputRef.current?.click();
+  };
+
+  const handleLogout = async () => {
+    try {
+      await fetch("http://localhost:8000/auth/logout", {
+        method: "POST",
+        credentials: "include",
+      });
+      router.push("/login");
+    } catch (error) {
+      console.error("Logout failed:", error);
+    }
   };
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -27,9 +41,10 @@ const Dashboard = () => {
       setIsUploading(true);
       setShowModal(true);
       try {
-        const res = await fetch("http://localhost:8000/api/v1/upload_video", {
+        const res = await fetch("http://localhost:8000/api/v1/videos/upload", {
           method: "POST",
           body: formData,
+          credentials: "include",
         });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         fetchVideos();
@@ -52,17 +67,28 @@ const Dashboard = () => {
           onChange={handleFileUpload}
           className='hidden'
         />
-        <button
-          onClick={handleUploadClick}
-          className='flex gap-2 px-4 py-2 text-white bg-blue-500 rounded-lg hover:bg-blue-600 cursor-pointer transition'
-          disabled={isUploading}>
-          <Upload />
-          Upload Video
-        </button>
+        <div className='flex gap-4'>
+          <button
+            onClick={handleUploadClick}
+            className='flex gap-2 px-4 py-2 text-white bg-blue-500 hover:bg-blue-600 rounded-lg cursor-pointer transition'
+            disabled={isUploading}>
+            <Upload />
+            Upload Video
+          </button>
+          <button
+            onClick={handleLogout}
+            className='flex items-center gap-2 px-4 py-2 text-white bg-red-500 hover:bg-red-600 rounded-lg cursor-pointer transition'>
+            <LogOut />
+            Logout
+          </button>
+        </div>
       </div>
       {showModal && (
-        <Modal title='Uploading...' onClose={() => setShowModal(false)}>
-          {/* TODO: Uploading UI/UX */}
+        <Modal
+          title='Uploading...'
+          onClose={() => {
+            if (!isUploading) setShowModal(false);
+          }}>
           {isUploading ? (
             <div>Upload in Progress</div>
           ) : (
