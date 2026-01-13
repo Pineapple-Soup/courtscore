@@ -107,7 +107,7 @@ class VideoResponse(BaseModel):
 # Annotation
 
 class AnnotationCreateRequest(BaseModel):
-    video_id: str
+    project_video_id: str
     segments: list[SegmentSchema] = []
 
 class AnnotationUpdateRequest(BaseModel):
@@ -117,9 +117,137 @@ class AnnotationResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: str
-    video_id: str
+    project_video_id: str
     user_id: str
     segments: list[SegmentSchema]
+    submitted: bool = False
+    submitted_at: datetime | None = None
+    updated_at: datetime
+
+class AnnotationSubmitResponse(BaseModel):
+    id: str
+    project_video_id: str
+    submitted: bool
+    submitted_at: datetime
+    updated_at: datetime
+
+
+# Project
+
+class ProjectMemberRoleEnum(str, Enum):
+    OWNER = "owner"
+    MEMBER = "member"
+
+
+class ProjectCreateRequest(BaseModel):
+    name: str
+    description: str | None = None
+    annotators_per_video: int
+
+    @field_validator("annotators_per_video")
+    @classmethod
+    def validate_annotators(cls, v: int) -> int:
+        if v < 1:
+            raise ValueError("annotators_per_video must be at least 1")
+        return v
+
+
+class ProjectUpdateRequest(BaseModel):
+    name: str | None = None
+    description: str | None = None
+
+
+class ProjectResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    name: str
+    description: str | None = None
+    owner_id: str
+    annotators_per_video: int
+    created_at: datetime | None = None
+
+
+class ProjectDetailResponse(ProjectResponse):
+    member_count: int = 0
+    video_count: int = 0
+    role: str | None = None  # Current user's role in the project
+
+
+class ProjectMemberAddRequest(BaseModel):
+    user_id: str
+    role: ProjectMemberRoleEnum = ProjectMemberRoleEnum.MEMBER
+
+
+class ProjectMemberResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    project_id: str
+    user_id: str
+    role: str
+    created_at: datetime | None = None
+    # Joined user fields
+    email: str | None = None
+    name: str | None = None
+
+
+class ProjectVideoLinkRequest(BaseModel):
+    video_id: str
+
+
+class VideoAssignmentResponse(BaseModel):
+    user_id: str
+
+
+class ProjectVideoResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    project_id: str
+    video_id: str
+    created_at: datetime | None = None
+    # Joined video fields
+    label: str | None = None
+    src: str | None = None
+    # Assignment info
+    assignments: list[VideoAssignmentResponse] = []
+
+
+class MyProjectVideoResponse(BaseModel):
+    """Response for project videos from member's perspective."""
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str  # project_video_id
+    video_id: str
+    label: str
+    src: str
+    created_at: datetime | None = None
+    is_assigned_to_me: bool = False
+    my_annotation_status: str = "not_started"  # not_started, in_progress, submitted
+
+
+class AnnotatorProgressResponse(BaseModel):
+    """Revealed only when all N annotations are submitted."""
+    user_id: str
+    name: str | None = None
+    submitted_at: datetime
+
+
+class VideoProgressResponse(BaseModel):
+    project_video_id: str
+    video_label: str
+    annotations_expected: int
+    annotations_submitted: int
+    is_complete: bool
+    annotators: list[AnnotatorProgressResponse] | None = None  # None until complete
+
+
+class ProjectProgressResponse(BaseModel):
+    total_videos: int
+    total_annotations_expected: int
+    total_annotations_submitted: int
+    videos: list[VideoProgressResponse]
 
 
 # Misc
