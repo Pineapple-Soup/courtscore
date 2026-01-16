@@ -105,12 +105,7 @@ class VideoResponse(BaseModel):
 
 
 # Annotation
-
-class AnnotationCreateRequest(BaseModel):
-    project_video_id: str
-    segments: list[SegmentSchema] = []
-
-class AnnotationUpdateRequest(BaseModel):
+class AnnotationRequest(BaseModel):
     segments: list[SegmentSchema] = []
 
 class AnnotationResponse(BaseModel):
@@ -124,22 +119,12 @@ class AnnotationResponse(BaseModel):
     submitted_at: datetime | None = None
     updated_at: datetime
 
-class AnnotationSubmitResponse(BaseModel):
-    id: str
-    project_video_id: str
-    submitted: bool
-    submitted_at: datetime
-    updated_at: datetime
-
-
 # Project
-
 class ProjectMemberRoleEnum(str, Enum):
     OWNER = "owner"
     MEMBER = "member"
 
-
-class ProjectCreateRequest(BaseModel):
+class ProjectRequest(BaseModel):
     name: str
     description: str | None = None
     annotators_per_video: int
@@ -151,12 +136,6 @@ class ProjectCreateRequest(BaseModel):
             raise ValueError("annotators_per_video must be at least 1")
         return v
 
-
-class ProjectUpdateRequest(BaseModel):
-    name: str | None = None
-    description: str | None = None
-
-
 class ProjectResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -167,17 +146,9 @@ class ProjectResponse(BaseModel):
     annotators_per_video: int
     created_at: datetime | None = None
 
-
-class ProjectDetailResponse(ProjectResponse):
-    member_count: int = 0
-    video_count: int = 0
-    role: str | None = None  # Current user's role in the project
-
-
-class ProjectMemberAddRequest(BaseModel):
-    user_id: str
+class ProjectMemberRequest(BaseModel):
+    email: str  # Add member by email instead of user_id
     role: ProjectMemberRoleEnum = ProjectMemberRoleEnum.MEMBER
-
 
 class ProjectMemberResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -192,7 +163,7 @@ class ProjectMemberResponse(BaseModel):
     name: str | None = None
 
 
-class ProjectVideoLinkRequest(BaseModel):
+class ProjectVideoRequest(BaseModel):
     video_id: str
 
 
