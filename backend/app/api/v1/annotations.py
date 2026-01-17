@@ -2,50 +2,70 @@ from fastapi import APIRouter, Depends
 
 from app.api.dependencies import get_annotation_service
 from app.database.models import Users
-from app.database.schemas import (
-    AnnotationCreateRequest,
-    AnnotationUpdateRequest,
-    AnnotationResponse,
-)
+from app.database.schemas import AnnotationRequest, AnnotationResponse
 from app.services.annotation import AnnotationService
 from app.services.auth import get_current_user
 
-router = APIRouter(prefix="/annotations")
+router = APIRouter(prefix="/annotations", tags=["annotations"])
 
 
-@router.post("", response_model=AnnotationResponse)
+@router.post("/{project_video_id}", response_model=AnnotationResponse, status_code=201)
 def create_annotation(
-    payload: AnnotationCreateRequest,
+    project_video_id: str,
+    payload: AnnotationRequest,
     user: Users = Depends(get_current_user),
     annotation_service: AnnotationService = Depends(get_annotation_service),
 ) -> AnnotationResponse:
-    annotation = annotation_service.create(
-        video_id=payload.video_id,
-        user_id=str(user.id),
-        segments=payload.segments
-    )
+    """
+    Create a new annotation for a project video.
+
+    User must be assigned to the video.
+    """
+    annotation = annotation_service.create(project_video_id, str(user.id), payload.segments)
     return AnnotationResponse.model_validate(annotation)
 
 
-@router.get("/{video_id}", response_model=AnnotationResponse)
+@router.get("/{project_video_id}", response_model=AnnotationResponse)
 def get_annotation(
-    video_id: str,
+    project_video_id: str,
     user: Users = Depends(get_current_user),
     annotation_service: AnnotationService = Depends(get_annotation_service),
 ) -> AnnotationResponse:
-    annotation = annotation_service.get_by_video_id(video_id)
+    """
+    Get annotation for a project video.
+
+    Returns the current user's annotation. Creates empty annotation if none exists.
+    User must be assigned to the video.
+    """
+    annotation = annotation_service.get_or_create(project_video_id, str(user.id))
     return AnnotationResponse.model_validate(annotation)
 
 
-@router.put("/{video_id}", response_model=AnnotationResponse)
+@router.put("/{project_video_id}", response_model=AnnotationResponse)
 def update_annotation(
-    video_id: str,
-    payload: AnnotationUpdateRequest,
+    project_video_id: str,
+    payload: AnnotationRequest,
     user: Users = Depends(get_current_user),
     annotation_service: AnnotationService = Depends(get_annotation_service),
 ) -> AnnotationResponse:
+
     annotation = annotation_service.update(
-        video_id=video_id,
-        segments=payload.segments
+        project_video_id, str(user.id), payload.segments
     )
+    return AnnotationResponse.model_validate(annotation)
+
+
+@router.post("/{project_video_id}/submit", response_model=AnnotationResponse)
+def submit_annotation(
+    project_video_id: str,
+    user: Users = Depends(get_current_user),
+    annotation_service: AnnotationService = Depends(get_annotation_service),
+) -> AnnotationResponse:
+    """
+    Submit and lock an annotation.
+
+    Once submitted, the annotation cannot be modified. This action cannot be undone.
+    User must be assigned to the video.
+    """
+    annotation = annotation_service.submit(project_video_id, str(user.id))
     return AnnotationResponse.model_validate(annotation)
