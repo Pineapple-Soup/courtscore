@@ -12,17 +12,15 @@ class Video(Base):
 
     id = Column(String, primary_key=True, index=True)
     src = Column(String, nullable=False, index=True)
-    label = Column(String, nullable=False)
-    status = Column(String, default="Not Started", nullable=False)
+    label = Column(String, nullable=False)    
     description = Column(String, nullable=True)
     created_at = Column(TIMESTAMP, server_default=func.now())
 
 
-class Users(Base):
+class User(Base):
     """
     Represents a user in the system.
     Users can be global administrators or regular users.
-    Project-level roles are managed through ProjectMember.
     """
     __tablename__ = "users"
 
@@ -38,7 +36,7 @@ class Users(Base):
 
 class Project(Base):
     """
-    Represents a project that contains videos and members.
+    Represents a project that contains members and linked videos.
     Projects enable organized, double-blind annotation workflows.
     """
     __tablename__ = "projects"
@@ -46,22 +44,20 @@ class Project(Base):
     id = Column(String, primary_key=True, index=True)
     name = Column(String, nullable=False)
     description = Column(String, nullable=True)
-    owner_id = Column(String, ForeignKey("users.id"), nullable=False, index=True)
     annotators_per_video = Column(Integer, nullable=False)
     created_at = Column(TIMESTAMP, server_default=func.now())
 
 
 class ProjectMember(Base):
     """
-    Links users to projects with role-based permissions.
-    Roles: 'owner' (can manage project) or 'member' (can annotate assigned videos).
+    Represents the membership of a user in a project.
+    Project members can be assigned to annotate project videos.
     """
     __tablename__ = "project_members"
 
     id = Column(String, primary_key=True, index=True)
     project_id = Column(String, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True)
     user_id = Column(String, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
-    role = Column(String, nullable=False, default="member")
     created_at = Column(TIMESTAMP, server_default=func.now())
 
     __table_args__ = (
@@ -71,9 +67,8 @@ class ProjectMember(Base):
 
 class ProjectVideo(Base):
     """
-    Links videos from the shared library to specific projects.
-    Creates a unique annotation scope - same video can exist in multiple projects
-    with independent annotations.
+    Represents a video from the shared library linked to a specific project.
+    Project videos can be assigned to multiple members for annotation.
     """
     __tablename__ = "project_videos"
 
@@ -87,16 +82,17 @@ class ProjectVideo(Base):
     )
 
 
-class VideoAssignment(Base):
+class Assignment(Base):
     """
-    Tracks which members are assigned to annotate which project-videos.
+    Represents the assignment of a project-video to a user.
     Assignments are created automatically using the balanced pairing algorithm.
     """
-    __tablename__ = "video_assignments"
+    __tablename__ = "assignments"
 
     id = Column(String, primary_key=True, index=True)
     project_video_id = Column(String, ForeignKey("project_videos.id", ondelete="CASCADE"), nullable=False, index=True)
     user_id = Column(String, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    status = Column(String, nullable=False, default="Not Started")
     created_at = Column(TIMESTAMP, server_default=func.now())
 
     __table_args__ = (
@@ -104,24 +100,17 @@ class VideoAssignment(Base):
     )
 
 
-class Annotations(Base):
+class Annotation(Base):
     """
-    Stores annotation data for a project-video by a specific user.
-    Annotations are scoped to ProjectVideo (not Video) to enable independent
-    annotation sets per project. Submitted annotations are locked.
+    Represents the annotations made by a user on an assigned project video.
+    Annotations are linked to a specific assignment and contain segment data.
     """
     __tablename__ = "annotations"
 
     id = Column(String, primary_key=True, index=True)
-    project_video_id = Column(String, ForeignKey("project_videos.id", ondelete="CASCADE"), nullable=False, index=True)
-    user_id = Column(String, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    assignment_id = Column(String, ForeignKey("assignments.id", ondelete="CASCADE"), unique=True, nullable=False)
     segments = Column(JSON, nullable=False)
     submitted = Column(Boolean, nullable=False, default=False)
     submitted_at = Column(TIMESTAMP, nullable=True)
     updated_at = Column(TIMESTAMP, nullable=True)
     created_at = Column(TIMESTAMP, server_default=func.now())
-
-    __table_args__ = (
-        UniqueConstraint("project_video_id", "user_id", name="unique_project_video_user_annotation"),
-    )
-
