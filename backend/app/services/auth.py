@@ -9,7 +9,7 @@ from datetime import datetime, timedelta, timezone
 
 from app.core.config import settings
 from app.database.db import get_db
-from app.database.models import Users
+from app.database.models import User
 from sqlalchemy.orm import Session
 
 ALGORITHM = "HS256"
@@ -79,8 +79,8 @@ async def exchange_code_for_tokens(code: str):
         raise HTTPException(status_code=400, detail=f"Failed to exchange code")
     return res.json()
 
-def create_user_with_password(email: str, password: str, name: str, db: Session) -> Users:
-    existing = db.query(Users).filter(Users.email == email).first()
+def create_user_with_password(email: str, password: str, name: str, db: Session) -> User:
+    existing = db.query(User).filter(User.email == email).first()
     if existing:
         if getattr(existing, "google_sub", None):
             raise HTTPException(
@@ -88,14 +88,14 @@ def create_user_with_password(email: str, password: str, name: str, db: Session)
                 detail="An account for this email already exists. Please sign in via Google."
             )
         raise HTTPException(status_code=400, detail="User with that email already exists")
-    new_user = Users(id=str(uuid.uuid4()), email=email, name=name, hashed_password=hash_password(password))
+    new_user = User(id=str(uuid.uuid4()), email=email, name=name, hashed_password=hash_password(password))
     db.add(new_user)
     db.commit()
     db.refresh(new_user)
     return new_user
 
-def authenticate_user(email: str, password: str, db: Session) -> Users | None:
-    user = db.query(Users).filter(Users.email == email).first()
+def authenticate_user(email: str, password: str, db: Session) -> Optional[User]:
+    user = db.query(User).filter(User.email == email).first()
     if user and getattr(user, "google_sub", None) and not getattr(user, "hashed_password", None):
         raise HTTPException(
             status_code=400,
@@ -110,7 +110,7 @@ def authenticate_user(email: str, password: str, db: Session) -> Users | None:
         return user
     return None
 
-def user_from_google(id_info: Mapping, db: Session) -> Users:
+def user_from_google(id_info: Mapping, db: Session) -> User:
     sub = id_info.get("sub")
     email = id_info.get("email")
     name = id_info.get("name")
@@ -118,7 +118,7 @@ def user_from_google(id_info: Mapping, db: Session) -> Users:
     if not sub:
         raise ValueError("No Google sub")
 
-    user = db.query(Users).filter(Users.google_sub == sub).first()
+    user = db.query(User).filter(User.google_sub == sub).first()
     if user:
         # Update last_login_at timestamp
         setattr(user, "last_login_at", datetime.now(timezone.utc))
@@ -128,7 +128,7 @@ def user_from_google(id_info: Mapping, db: Session) -> Users:
     
     # Email fallback
     if email:
-        user = db.query(Users).filter(Users.email == email).first()
+        user = db.query(User).filter(User.email == email).first()
         if user:
             # Link Google account and update last_login_at
             setattr(user, "google_sub", sub)
@@ -139,13 +139,13 @@ def user_from_google(id_info: Mapping, db: Session) -> Users:
 
     # Create new user
     now = datetime.now(timezone.utc)
-    new_user = Users(id=str(uuid.uuid4()), email=email or f"{sub}@unknown", google_sub=sub, name=name, last_login_at=now)
+    new_user = User(id=str(uuid.uuid4()), email=email or f"{sub}@unknown", google_sub=sub, name=name, last_login_at=now)
     db.add(new_user)
     db.commit()
     db.refresh(new_user)
     return new_user
 
-def get_current_user(request: Request, db: Session = Depends(get_db)) -> Users:
+def get_current_user(request: Request, db: Session = Depends(get_db)) -> User:
     token = request.cookies.get("access_token")
     if not token:
         raise HTTPException(status_code=401, detail="Missing auth token")
@@ -153,13 +153,13 @@ def get_current_user(request: Request, db: Session = Depends(get_db)) -> Users:
     user_id = payload.get("sub")
     if not user_id:
         raise HTTPException(status_code=401, detail="Invalid token payload")
-    user = db.query(Users).filter(Users.id == user_id).first()
+    user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=401, detail="User not found")
     return user
 
 def require_role(role: str) -> Callable:
-    def role_checker(user: Users = Depends(get_current_user)) -> Users:
+    def role_checker(user: User = Depends(get_current_user)) -> User:
         if getattr(user, "role", "user") != role:
             raise HTTPException(status_code=403, detail="Insufficient privileges")
         return user
