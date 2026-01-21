@@ -7,7 +7,6 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.core.exceptions import VideoNotFoundError
 from app.database.models import Video
-from app.database.schemas import VideoStatusEnum
 from app.services.gcs import GCSService
 from app.services.preprocess import PreprocessService
 
@@ -25,13 +24,6 @@ class VideoService:
         video = self.db.query(Video).filter(Video.id == video_id).first()
         if not video:
             raise VideoNotFoundError(video_id)
-        return video
-
-    def update_status(self, video_id: str, status: VideoStatusEnum) -> Video:
-        video = self.get_by_id(video_id)
-        setattr(video, "status", status.value)
-        self.db.commit()
-        self.db.refresh(video)
         return video
 
     def get_signed_url(self, video_id: str) -> str:
