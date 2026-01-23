@@ -1,13 +1,9 @@
 from fastapi import APIRouter, Depends, File, UploadFile, HTTPException
 
 from app.api.dependencies import get_video_service
-from app.database.models import Users
-from app.database.schemas import (
-    VideoUpdateRequest,
-    VideoResponse,
-    SignedUrlResponse,
-)
-from app.services.auth import get_current_user
+from app.database.models import User
+from app.database.schemas import SignedUrlResponse, VideoResponse
+from app.services.auth import require_role
 from app.services.video import VideoService
 
 router = APIRouter(prefix="/videos")
@@ -16,7 +12,7 @@ router = APIRouter(prefix="/videos")
 @router.post("/upload", status_code=201, response_model=list[VideoResponse])
 def upload_video(
     file: UploadFile = File(...),
-    user: Users = Depends(get_current_user),
+    _: User = Depends(require_role("admin")),
     video_service: VideoService = Depends(get_video_service),
 ) -> list[VideoResponse]:
     if not file.filename:
@@ -29,6 +25,7 @@ def upload_video(
 
 @router.get("", response_model=list[VideoResponse])
 def list_videos(
+    _: User = Depends(require_role("admin")),
     video_service: VideoService = Depends(get_video_service),
 ) -> list[VideoResponse]:
     videos = video_service.list_all()
@@ -38,21 +35,20 @@ def list_videos(
 @router.get("/{video_id}", response_model=VideoResponse)
 def get_video(
     video_id: str,
+    _: User = Depends(require_role("admin")),
     video_service: VideoService = Depends(get_video_service),
 ) -> VideoResponse:
     video = video_service.get_by_id(video_id)
     return VideoResponse.model_validate(video)
 
 
-@router.put("/{video_id}", response_model=VideoResponse)
-def update_video(
+@router.delete("/{video_id}", status_code=204)
+def delete_video(
     video_id: str,
-    payload: VideoUpdateRequest,
-    user: Users = Depends(get_current_user),
+    _: User = Depends(require_role("admin")),
     video_service: VideoService = Depends(get_video_service),
-) -> VideoResponse:
-    video = video_service.update_status(video_id, payload.status)
-    return VideoResponse.model_validate(video)
+) -> None:
+    video_service.delete_by_id(video_id)
 
 
 @router.get("/{video_id}/url", response_model=SignedUrlResponse)

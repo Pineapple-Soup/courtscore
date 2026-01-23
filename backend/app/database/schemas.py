@@ -6,16 +6,6 @@ from typing import Self
 from app.core.config import settings
 
 
-class BehaviorEnum(int, Enum):
-    ORIENTING = 1
-    FOLLOWING = 2
-    TAPPING = 3
-    SINGING = 4
-    LICKING = 5
-    ATT_COPULATION = 6
-    SUC_COPULATION = 7
-
-
 class VideoStatusEnum(str, Enum):
     NOT_STARTED = "Not Started"
     IN_PROGRESS = "In Progress"
@@ -24,7 +14,7 @@ class VideoStatusEnum(str, Enum):
 
 # Segment
 class SegmentSchema(BaseModel):
-    behavior: BehaviorEnum
+    behavior: str
     startTime: float
     endTime: float | None = None
     notes: str | None = None
@@ -83,23 +73,14 @@ class UserResponse(BaseModel):
     name: str | None = None
     role: str
 
-class AuthResponse(BaseModel):
-    success: bool
-    user: UserResponse
-
 
 # Video
-class VideoUpdateRequest(BaseModel):
-    status: VideoStatusEnum
-
-
 class VideoResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: str
     src: str
     label: str
-    status: str
     description: str | None = None
     created_at: datetime | None = None
 
@@ -112,18 +93,14 @@ class AnnotationResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: str
-    project_video_id: str
-    user_id: str
+    assignment_id: str
     segments: list[SegmentSchema]
     submitted: bool = False
     submitted_at: datetime | None = None
     updated_at: datetime
 
-# Project
-class ProjectMemberRoleEnum(str, Enum):
-    OWNER = "owner"
-    MEMBER = "member"
 
+# Project
 class ProjectRequest(BaseModel):
     name: str
     description: str | None = None
@@ -142,13 +119,11 @@ class ProjectResponse(BaseModel):
     id: str
     name: str
     description: str | None = None
-    owner_id: str
     annotators_per_video: int
     created_at: datetime | None = None
 
 class ProjectMemberRequest(BaseModel):
     email: str  # Add member by email instead of user_id
-    role: ProjectMemberRoleEnum = ProjectMemberRoleEnum.MEMBER
 
 class ProjectMemberResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -156,7 +131,6 @@ class ProjectMemberResponse(BaseModel):
     id: str
     project_id: str
     user_id: str
-    role: str
     created_at: datetime | None = None
     # Joined user fields
     email: str | None = None
@@ -165,10 +139,6 @@ class ProjectMemberResponse(BaseModel):
 
 class ProjectVideoRequest(BaseModel):
     video_id: str
-
-
-class VideoAssignmentResponse(BaseModel):
-    user_id: str
 
 
 class ProjectVideoResponse(BaseModel):
@@ -182,43 +152,17 @@ class ProjectVideoResponse(BaseModel):
     label: str | None = None
     src: str | None = None
     # Assignment info
-    assignments: list[VideoAssignmentResponse] = []
+    assignments: list[str] = []
 
 
-class MyProjectVideoResponse(BaseModel):
-    """Response for project videos from member's perspective."""
+class AssignmentResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
-    id: str  # project_video_id
-    video_id: str
-    label: str
-    src: str
-    created_at: datetime | None = None
-    is_assigned_to_me: bool = False
-    my_annotation_status: str = "not_started"  # not_started, in_progress, submitted
-
-
-class AnnotatorProgressResponse(BaseModel):
-    """Revealed only when all N annotations are submitted."""
-    user_id: str
-    name: str | None = None
-    submitted_at: datetime
-
-
-class VideoProgressResponse(BaseModel):
+    id: str
     project_video_id: str
-    video_label: str
-    annotations_expected: int
-    annotations_submitted: int
-    is_complete: bool
-    annotators: list[AnnotatorProgressResponse] | None = None  # None until complete
-
-
-class ProjectProgressResponse(BaseModel):
-    total_videos: int
-    total_annotations_expected: int
-    total_annotations_submitted: int
-    videos: list[VideoProgressResponse]
+    user_id: str
+    created_at: datetime | None = None
+    status: VideoStatusEnum = VideoStatusEnum.NOT_STARTED
 
 
 # Misc

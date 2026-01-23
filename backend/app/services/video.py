@@ -26,6 +26,12 @@ class VideoService:
             raise VideoNotFoundError(video_id)
         return video
 
+    def delete_by_id(self, video_id: str) -> None:
+        video = self.get_by_id(video_id)
+        self.gcs_service.delete_video(str(video.src))
+        self.db.delete(video)
+        self.db.commit()
+
     def get_signed_url(self, video_id: str) -> str:
         video = self.get_by_id(video_id)
         return self.gcs_service.generate_signed_url(str(video.src))
