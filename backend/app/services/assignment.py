@@ -3,7 +3,7 @@ from uuid import uuid4
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from app.database.models import ProjectMember, ProjectVideo, VideoAssignment, Annotations
+from app.database.models import ProjectMember, ProjectVideo, Assignment
 
 
 def get_pair_counts(db: Session, project_id: str, exclude_user_id: str | None = None) -> dict[frozenset[str], int]:
@@ -20,13 +20,13 @@ def get_pair_counts(db: Session, project_id: str, exclude_user_id: str | None = 
     """
     # Get all video assignments for this project
     query = (
-        db.query(VideoAssignment.project_video_id, VideoAssignment.user_id)
-        .join(ProjectVideo, VideoAssignment.project_video_id == ProjectVideo.id)
+        db.query(Assignment.project_video_id, Assignment.user_id)
+        .join(ProjectVideo, Assignment.project_video_id == ProjectVideo.id)
         .filter(ProjectVideo.project_id == project_id)
     )
     
     if exclude_user_id:
-        query = query.filter(VideoAssignment.user_id != exclude_user_id)
+        query = query.filter(Assignment.user_id != exclude_user_id)
     
     assignments = query.all()
     
@@ -60,15 +60,15 @@ def get_workload(db: Session, project_id: str, exclude_user_id: str | None = Non
         Dictionary mapping user_id to assignment count
     """
     query = (
-        db.query(VideoAssignment.user_id, func.count(VideoAssignment.id).label("count"))
-        .join(ProjectVideo, VideoAssignment.project_video_id == ProjectVideo.id)
+        db.query(Assignment.user_id, func.count(Assignment.id).label("count"))
+        .join(ProjectVideo, Assignment.project_video_id == ProjectVideo.id)
         .filter(ProjectVideo.project_id == project_id)
     )
     
     if exclude_user_id:
-        query = query.filter(VideoAssignment.user_id != exclude_user_id)
+        query = query.filter(Assignment.user_id != exclude_user_id)
     
-    results = query.group_by(VideoAssignment.user_id).all()
+    results = query.group_by(Assignment.user_id).all()
     
     return {user_id: count for user_id, count in results}
 
@@ -179,7 +179,7 @@ def assign_video(
     n: int,
     pair_counts: dict[frozenset[str], int] | None = None,
     workload: dict[str, int] | None = None
-) -> list[VideoAssignment]:
+) -> list[Assignment]:
     """
     Assign N members to a single video using balanced pairing.
     
@@ -209,7 +209,7 @@ def assign_video(
     # Create assignments
     assignments = []
     for user_id in selected:
-        assignment = VideoAssignment(
+        assignment = Assignment(
             id=str(uuid4()),
             project_video_id=project_video_id,
             user_id=user_id
@@ -225,7 +225,7 @@ def assign_videos_batch(
     project_video_ids: list[str],
     project_id: str,
     n: int
-) -> dict[str, list[VideoAssignment]]:
+) -> dict[str, list[Assignment]]:
     """
     Assign members to multiple videos with balanced pairing.
     
@@ -244,7 +244,7 @@ def assign_videos_batch(
     pair_counts = get_pair_counts(db, project_id)
     workload = get_workload(db, project_id)
     
-    result: dict[str, list[VideoAssignment]] = {}
+    result: dict[str, list[Assignment]] = {}
     
     for pv_id in project_video_ids:
         assignments = assign_video(db, pv_id, project_id, n, pair_counts, workload)
@@ -266,8 +266,8 @@ def get_current_assignees(db: Session, project_video_id: str) -> list[str]:
     """
     return [
         row[0] for row in 
-        db.query(VideoAssignment.user_id)
-        .filter(VideoAssignment.project_video_id == project_video_id)
+        db.query(Assignment.user_id)
+        .filter(Assignment.project_video_id == project_video_id)
         .all()
     ]
 
@@ -293,11 +293,11 @@ def redistribute_after_removal(
     # Get all project videos where removed user was assigned
     affected_pv_ids = [
         row[0] for row in
-        db.query(VideoAssignment.project_video_id)
-        .join(ProjectVideo, VideoAssignment.project_video_id == ProjectVideo.id)
+        db.query(Assignment.project_video_id)
+        .join(ProjectVideo, Assignment.project_video_id == ProjectVideo.id)
         .filter(
             ProjectVideo.project_id == project_id,
-            VideoAssignment.user_id == removed_user_id
+            Assignment.user_id == removed_user_id
         )
         .all()
     ]
@@ -306,9 +306,9 @@ def redistribute_after_removal(
         return {}
     
     # Delete assignments for removed user
-    db.query(VideoAssignment).filter(
-        VideoAssignment.project_video_id.in_(affected_pv_ids),
-        VideoAssignment.user_id == removed_user_id
+    db.query(Assignment).filter(
+        Assignment.project_video_id.in_(affected_pv_ids),
+        Assignment.user_id == removed_user_id
     ).delete(synchronize_session=False)
     
     # Build pair counts and workload excluding removed user
@@ -346,7 +346,7 @@ def redistribute_after_removal(
         best_replacement = min(candidates, key=score_candidate)
         
         # Create new assignment
-        new_assignment = VideoAssignment(
+        new_assignment = Assignment(
             id=str(uuid4()),
             project_video_id=pv_id,
             user_id=best_replacement
@@ -376,9 +376,9 @@ def check_assignment_exists(db: Session, project_video_id: str, user_id: str) ->
     Returns:
         True if assignment exists
     """
-    return db.query(VideoAssignment).filter(
-        VideoAssignment.project_video_id == project_video_id,
-        VideoAssignment.user_id == user_id
+    return db.query(Assignment).filter(
+        Assignment.project_video_id == project_video_id,
+        Assignment.user_id == user_id
     ).first() is not None
 
 
@@ -396,11 +396,11 @@ def get_user_assignments(db: Session, project_id: str, user_id: str) -> list[str
     """
     return [
         row[0] for row in
-        db.query(VideoAssignment.project_video_id)
-        .join(ProjectVideo, VideoAssignment.project_video_id == ProjectVideo.id)
+        db.query(Assignment.project_video_id)
+        .join(ProjectVideo, Assignment.project_video_id == ProjectVideo.id)
         .filter(
             ProjectVideo.project_id == project_id,
-            VideoAssignment.user_id == user_id
+            Assignment.user_id == user_id
         )
         .all()
     ]
