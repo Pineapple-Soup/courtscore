@@ -38,7 +38,7 @@ def get_video(
     _: User = Depends(require_role("admin")),
     video_service: VideoService = Depends(get_video_service),
 ) -> VideoResponse:
-    video = video_service.get_by_id(video_id)
+    video = video_service.get(video_id)
     return VideoResponse.model_validate(video)
 
 
@@ -48,7 +48,7 @@ def delete_video(
     _: User = Depends(require_role("admin")),
     video_service: VideoService = Depends(get_video_service),
 ) -> None:
-    video_service.delete_by_id(video_id)
+    video_service.delete(video_id)
 
 
 @router.get("/{video_id}/url", response_model=SignedUrlResponse)

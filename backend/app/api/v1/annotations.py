@@ -1,10 +1,8 @@
 from fastapi import APIRouter, Depends
 
 from app.api.dependencies import get_annotation_service
-from app.database.models import User
 from app.database.schemas import AnnotationRequest, AnnotationResponse
 from app.services.annotation import AnnotationService
-from app.services.auth import get_current_user
 
 router = APIRouter(prefix="/annotations", tags=["annotations"])
 
@@ -13,7 +11,6 @@ router = APIRouter(prefix="/annotations", tags=["annotations"])
 def create_annotation(
     assignment_id: str,
     payload: AnnotationRequest,
-    user: User = Depends(get_current_user),
     annotation_service: AnnotationService = Depends(get_annotation_service),
 ) -> AnnotationResponse:
     """
@@ -21,14 +18,13 @@ def create_annotation(
 
     Returns the created annotation.
     """
-    annotation = annotation_service.create(assignment_id, str(user.id), payload.segments)
+    annotation = annotation_service.create(assignment_id, payload.segments)
     return AnnotationResponse.model_validate(annotation)
 
 
 @router.get("/{assignment_id}", response_model=AnnotationResponse)
 def get_annotation(
     assignment_id: str,
-    user: User = Depends(get_current_user),
     annotation_service: AnnotationService = Depends(get_annotation_service),
 ) -> AnnotationResponse:
     """
@@ -36,7 +32,7 @@ def get_annotation(
 
     Returns the annotation corresponding to assignment_id.
     """
-    annotation = annotation_service.get(assignment_id, str(user.id))
+    annotation = annotation_service.get(assignment_id) 
     return AnnotationResponse.model_validate(annotation)
 
 
@@ -44,7 +40,6 @@ def get_annotation(
 def update_annotation(
     assignment_id: str,
     payload: AnnotationRequest,
-    user: User = Depends(get_current_user),
     annotation_service: AnnotationService = Depends(get_annotation_service),
 ) -> AnnotationResponse:
     """
@@ -53,14 +48,13 @@ def update_annotation(
     Returns the updated annotation.
     """
 
-    annotation = annotation_service.update(assignment_id, str(user.id), payload.segments)
+    annotation = annotation_service.update(assignment_id, payload.segments)
     return AnnotationResponse.model_validate(annotation)
 
 
 @router.post("/{assignment_id}/submit", response_model=AnnotationResponse)
 def submit_annotation(
     assignment_id: str,
-    user: User = Depends(get_current_user),
     annotation_service: AnnotationService = Depends(get_annotation_service),
 ) -> AnnotationResponse:
     """
@@ -69,5 +63,5 @@ def submit_annotation(
     Once submitted, the annotation cannot be modified. This action cannot be undone.
     Returns the submitted annotation.
     """
-    annotation = annotation_service.submit(assignment_id, str(user.id))
+    annotation = annotation_service.submit(assignment_id)
     return AnnotationResponse.model_validate(annotation)
