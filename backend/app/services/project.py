@@ -5,7 +5,6 @@ from uuid import uuid4
 from app.core.context import ServiceContext
 from app.core.exceptions import ConflictError, ForbiddenError, NotFoundError
 from app.database.models import (
-    Assignment,
     Project,
     ProjectMember,
     ProjectVideo,
@@ -115,6 +114,21 @@ class ProjectService:
             .filter(ProjectMember.user_id == self.ctx.user_id)
             .all()
         )
+
+    def get_project(self, project_id: str) -> Project:
+        """
+        Get a specific project by ID.
+
+        Raises:
+            ForbiddenError: If user is not a member or admin
+            NotFoundError: If project doesn't exist
+        """
+        project = self._get_project(project_id)
+
+        if not self.ctx.is_admin:
+            self._require_member(project_id)
+
+        return project
 
     def update_project(self, project_id: str, project_name: Optional[str] = None, description: Optional[str] = None, annotators_per_video: Optional[int] = None) -> Project:
         """
@@ -273,38 +287,16 @@ class ProjectService:
 
         return project_video
 
-    def _list_linked_videos(self, project_id: str) -> list[ProjectVideo]:
+    def list_linked_videos(self, project_id: str) -> list[ProjectVideo]:
         """
         List all videos linked to a project.
         """
+        self._require_admin()
         return (self.db
             .query(ProjectVideo)
             .filter(ProjectVideo.project_id == project_id)
             .all()
         )
-    
-    def get_linked_videos(self, project_id: str) -> list[ProjectVideo]:
-        """
-        List all videos linked to a project assigned to a user.
-        """
-
-        if self.ctx.is_admin:
-            return self._list_linked_videos(project_id)
-        
-        self._require_member(project_id)
-
-        # select only videos assigned to the user and within the current project
-        user_assignment = (self.db
-            .query(ProjectVideo)
-            .join(ProjectVideo, Assignment.project_video_id == ProjectVideo.id)
-            .filter(
-                Assignment.user_id == self.ctx.user_id,
-                ProjectVideo.project_id == project_id,
-            )
-            .all()
-        )
-
-        return user_assignment
 
     def unlink_video(self, project_id: str, project_video_id: str) -> None:
         """
