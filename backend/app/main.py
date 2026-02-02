@@ -10,10 +10,18 @@ from app.core.exceptions import (
     AnnotationNotFoundError,
     ProcessingError,
     GCSError,
+    NotFoundError,
+    ForbiddenError,
+    ConflictError,
+    BadRequestError,
     video_not_found_handler,
     annotation_not_found_handler,
     processing_error_handler,
     gcs_error_handler,
+    not_found_handler,
+    forbidden_handler,
+    conflict_handler,
+    bad_request_handler,
 )
 from app.database.db import init_db
 from app.api.v1.router import api_router, auth_router, health_router
@@ -38,6 +46,10 @@ app.add_exception_handler(VideoNotFoundError, video_not_found_handler)
 app.add_exception_handler(AnnotationNotFoundError, annotation_not_found_handler)
 app.add_exception_handler(ProcessingError, processing_error_handler)
 app.add_exception_handler(GCSError, gcs_error_handler)
+app.add_exception_handler(NotFoundError, not_found_handler)
+app.add_exception_handler(ForbiddenError, forbidden_handler)
+app.add_exception_handler(ConflictError, conflict_handler)
+app.add_exception_handler(BadRequestError, bad_request_handler)
 
 # Create required directories
 os.makedirs(settings.UPLOAD_DIRECTORY, exist_ok=True)
