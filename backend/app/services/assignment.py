@@ -1,14 +1,17 @@
 import heapq
 
-from uuid import uuid4
 from sqlalchemy.orm import Session
+from typing import Optional
+from uuid import uuid4
 
+from app.core.context import ServiceContext
 from app.core.exceptions import NotFoundError, ProcessingError
 from app.database.models import Assignment, Project, ProjectMember, ProjectVideo
 
 class AssignmentService:
-    def __init__(self, db: Session, project_id: str) -> None:
+    def __init__(self, db: Session, ctx: ServiceContext, project_id: Optional[str]) -> None:
         self.db = db
+        self.ctx = ctx
         self.project_id = project_id
 
     def _get_project(self) -> Project:
@@ -63,3 +66,32 @@ class AssignmentService:
                 )
                 self.db.add(assignment)
         self.db.commit()
+
+    def list_user_assignments(self) -> list[Assignment]:
+        try:
+            assignments = (self.db
+                .query(Assignment)
+                .filter(Assignment.user_id == self.ctx.user_id)
+                .all()
+            )
+        except Exception as e:
+            raise ProcessingError(f"Failed to retrieve assignments: {str(e)}")
+        
+        return assignments
+    
+    def list_user_assignments_in_project(self) -> list[Assignment]:
+        try:
+            assignments = (self.db
+                .query(Assignment)
+                .join(ProjectVideo, Assignment.project_video_id == ProjectVideo.id)
+                .filter(
+                    Assignment.user_id == self.ctx.user_id,
+                    ProjectVideo.project_id == self.project_id,
+                )
+                .all()
+            )
+        except Exception as e:
+            raise ProcessingError(f"Failed to retrieve assignments: {str(e)}")
+        
+        return assignments
+    
