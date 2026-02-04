@@ -1,10 +1,12 @@
 from fastapi import Depends
 from sqlalchemy.orm import Session
+from typing import Optional
 
 from app.core.config import settings
 from app.core.context import ServiceContext
 from app.database.db import get_db
 from app.database.models import User
+from app.services.assignment import AssignmentService
 from app.services.annotation import AnnotationService
 from app.services.auth import get_current_user
 from app.services.gcs import GCSService
@@ -21,6 +23,13 @@ def get_annotation_service(
     ctx: ServiceContext = Depends(get_service_context)
 ) -> AnnotationService:
     return AnnotationService(db=db, ctx=ctx)
+
+def get_assignment_service(
+    db: Session = Depends(get_db),
+    ctx: ServiceContext = Depends(get_service_context),
+    project_id: Optional[str] = None
+) -> AssignmentService:
+    return AssignmentService(db=db, ctx=ctx, project_id=project_id)
 
 def get_gcs_service() -> GCSService:
     return GCSService()
