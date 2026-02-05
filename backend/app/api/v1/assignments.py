@@ -1,11 +1,11 @@
-from fastAPI import APIRouter, Depends
+from fastapi import APIRouter, Depends
 
 from app.api.dependencies import get_assignment_service
 from app.database.schemas import AssignmentResponse
 from app.services.assignment import AssignmentService
 
-
 router = APIRouter(prefix="/assignments", tags=["assignments"])
+
 
 @router.get("", response_model=list[AssignmentResponse], status_code=200)
 def get_user_assignments(
