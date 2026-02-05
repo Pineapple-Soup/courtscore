@@ -5,7 +5,7 @@ from typing import Optional
 from uuid import uuid4
 
 from app.core.context import ServiceContext
-from app.core.exceptions import NotFoundError, ProcessingError
+from app.core.exceptions import ForbiddenError, NotFoundError, ProcessingError
 from app.database.models import Assignment, Project, ProjectMember, ProjectVideo
 
 class AssignmentService:
@@ -37,6 +37,9 @@ class AssignmentService:
         )
     
     def create_balanced_assignments(self) -> None:
+        if not self.ctx.is_admin:
+            raise ForbiddenError("Admin privileges required to create assignments.")
+
         project = self._get_project()
         project_members = self._get_project_members()
         project_videos = self._get_project_videos()

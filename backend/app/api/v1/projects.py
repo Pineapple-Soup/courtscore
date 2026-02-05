@@ -1,9 +1,10 @@
 from fastapi import APIRouter, Depends
 
-from app.api.dependencies import get_project_service
+from app.api.dependencies import get_assignment_service, get_project_service
 from app.database.models import User
-from app.database.schemas import ProjectRequest, ProjectResponse, ProjectMemberResponse, ProjectVideoResponse
+from app.database.schemas import AssignmentResponse, ProjectRequest, ProjectResponse, ProjectMemberResponse, ProjectVideoResponse
 from app.services.auth import require_role
+from app.services.assignment import AssignmentService
 from app.services.project import ProjectService
 
 router = APIRouter(prefix="/projects", tags=["projects"])
@@ -164,3 +165,17 @@ def unlink_video_from_project(
     Unlink a video from a project. Admin access required.
     """
     project_service.unlink_video(project_id, project_video_id)
+
+@router.get("/{project_id}/assignments", response_model=list[AssignmentResponse], status_code=200)
+def get_user_assignments(
+    assignment_service: AssignmentService = Depends(get_assignment_service),
+) -> list[AssignmentResponse]:
+    assignments = assignment_service.list_user_assignments_in_project()
+    return [AssignmentResponse.model_validate(a) for a in assignments]
+
+@router.post("/{project_id}/assignments", status_code=201)
+def create_assignments(
+    _: User = Depends(require_role("admin")),
+    assignment_service: AssignmentService = Depends(get_assignment_service),
+) -> None:
+    assignment_service.create_balanced_assignments()
