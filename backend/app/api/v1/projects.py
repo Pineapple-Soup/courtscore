@@ -173,9 +173,10 @@ def get_user_assignments(
     assignments = assignment_service.list_user_assignments_in_project()
     return [AssignmentResponse.model_validate(a) for a in assignments]
 
-@router.post("/{project_id}/assignments", status_code=201)
+@router.post("/{project_id}/assignments", response_model=list[AssignmentResponse],status_code=201)
 def create_assignments(
     _: User = Depends(require_role("admin")),
     assignment_service: AssignmentService = Depends(get_assignment_service),
-) -> None:
-    assignment_service.create_balanced_assignments()
+) -> list[AssignmentResponse]:
+    assignments = assignment_service.create_balanced_assignments()
+    return [AssignmentResponse.model_validate(a) for a in assignments]

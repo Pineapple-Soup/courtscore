@@ -36,7 +36,7 @@ class AssignmentService:
             .all()
         )
     
-    def create_balanced_assignments(self) -> None:
+    def create_balanced_assignments(self) -> list[Assignment]:
         if not self.ctx.is_admin:
             raise ForbiddenError("Admin privileges required to create assignments.")
 
@@ -48,6 +48,7 @@ class AssignmentService:
         if k > len(project_members):
             raise ProcessingError("Number of annotators per video exceeds number of project members.")
 
+        created_assignments = []
         pq = []
         for pm in project_members:
             heapq.heappush(pq, (0, getattr(pm, "user_id")))
@@ -67,8 +68,25 @@ class AssignmentService:
                     user_id=user_id,
                     status="Not Started",
                 )
+                created_assignments.append(assignment)
                 self.db.add(assignment)
+                self.db.refresh(assignment)
         self.db.commit()
+        return created_assignments
+
+    def get_assignment(self, assignment_id: str) -> Assignment:
+        try:
+            assignment = self.db.query(Assignment).filter(Assignment.id == assignment_id).first()
+        except Exception as e:
+            raise NotFoundError(f"Failed to retrieve assignment: {str(e)}")
+
+        if not assignment:
+            raise NotFoundError("Assignment not found.")
+        
+        if assignment.user_id != self.ctx.user_id and not self.ctx.is_admin:
+            raise ForbiddenError("Access denied to this assignment.")
+        
+        return assignment
 
     def list_user_assignments(self) -> list[Assignment]:
         try:
@@ -98,3 +116,17 @@ class AssignmentService:
         
         return assignments
     
+    def update_assignment_status(self, assignment_id: str, new_status: str) -> Assignment:
+        assignment = self.get_assignment(assignment_id)
+
+        if assignment.user_id != self.ctx.user_id and not self.ctx.is_admin:
+            raise ForbiddenError("Access denied to update this assignment.")
+        
+        try:
+            setattr(assignment, "status", new_status)
+            self.db.commit()
+            self.db.refresh(assignment)
+        except Exception as e:
+            raise ProcessingError(f"Failed to update assignment status: {str(e)}")
+        
+        return assignment
