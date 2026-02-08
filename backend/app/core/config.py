@@ -20,6 +20,9 @@ class Settings(BaseSettings):
     MIN_PASSWORD_LENGTH: int = 8
     ALLOWED_ORIGINS: list[str] = ["http://localhost:3000"]
 
+    ADMIN_EMAIL: str
+    ADMIN_PASSWORD: str
+
     class Config:
         env_file = ".env"
 
