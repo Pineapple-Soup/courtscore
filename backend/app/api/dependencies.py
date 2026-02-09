@@ -12,6 +12,7 @@ from app.services.auth import get_current_user
 from app.services.gcs import GCSService
 from app.services.preprocess import PreprocessService
 from app.services.project import ProjectService
+from app.services.user import UserService
 from app.services.video import VideoService
 
 
@@ -42,6 +43,12 @@ def get_project_service(
     ctx: ServiceContext = Depends(get_service_context)
 ) -> ProjectService:
     return ProjectService(db=db, ctx=ctx)
+
+def get_user_service(
+    db: Session = Depends(get_db),
+    ctx: ServiceContext = Depends(get_service_context)
+) -> UserService:
+    return UserService(db=db, ctx=ctx)
 
 def get_video_service(
     db: Session = Depends(get_db),
