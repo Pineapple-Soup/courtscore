@@ -25,11 +25,10 @@ def create_project(
 
 @router.get("", response_model=list[ProjectResponse], status_code=200)
 def list_projects(
-    _: User = Depends(require_role("user")),
     project_service: ProjectService = Depends(get_project_service),
 ) -> list[ProjectResponse]:
     """
-    List all projects. User access required.
+    List projects visible to a user. List all projects if admin, otherwise only projects the user is a member of.
 
     Returns a list of projects.
     """
