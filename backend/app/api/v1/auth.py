@@ -13,7 +13,7 @@ from app.database.models import User
 from app.database.schemas import (
     SignupRequest,
     LoginRequest,
-    SetPasswordRequest,
+    PasswordRequest,
     UserResponse,
 )
 from app.services import auth
@@ -140,7 +140,7 @@ def logout(response: Response) -> dict[str, bool]:
 
 @router.post("/set_password")
 def set_password(
-    payload: SetPasswordRequest,
+    payload: PasswordRequest,
     user: User = Depends(auth.get_current_user),
     db: Session = Depends(get_db),
 ) -> dict[str, bool]:

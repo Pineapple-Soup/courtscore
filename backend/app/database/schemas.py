@@ -2,6 +2,7 @@ import re
 from datetime import datetime
 from enum import Enum
 from pydantic import BaseModel, ConfigDict, EmailStr, field_validator, model_validator
+from pydantic.alias_generators import to_camel, to_snake
 from typing import Self
 from app.core.config import settings
 
@@ -11,27 +12,32 @@ class VideoStatusEnum(str, Enum):
     IN_PROGRESS = "In Progress"
     COMPLETED = "Completed"
 
+class BaseRequest(BaseModel):
+    model_config = ConfigDict(alias_generator=to_camel, from_attributes=True)
+
+class BaseResponse(BaseModel):
+    model_config = ConfigDict(alias_generator=to_snake, from_attributes=True)
 
 # Segment
-class SegmentSchema(BaseModel):
+class SegmentSchema(BaseRequest):
     behavior: str
-    startTime: float
-    endTime: float | None = None
+    start_time: float
+    end_time: float | None = None
     notes: str | None = None
 
     @model_validator(mode="after")
     def validate_time_range(self) -> Self:
-        if self.endTime is not None and self.endTime < self.startTime:
+        if self.end_time is not None and self.end_time < self.start_time:
             raise ValueError("endTime must be greater than or equal to startTime")
         return self
 
 
 # Auth
-class LoginRequest(BaseModel):
+class LoginRequest(BaseRequest):
     email: EmailStr
     password: str
 
-class SetPasswordRequest(BaseModel):
+class PasswordRequest(BaseRequest):
     password: str
 
     @field_validator("password")
@@ -47,27 +53,11 @@ class SetPasswordRequest(BaseModel):
             raise ValueError("Password must contain at least one digit")
         return v
 
-class SignupRequest(BaseModel):
+class SignupRequest(PasswordRequest):
     email: EmailStr
-    password: str
     name: str
 
-    @field_validator("password")
-    @classmethod
-    def validate_password(cls, v: str) -> str:
-        if len(v) < settings.MIN_PASSWORD_LENGTH:
-            raise ValueError(f"Password must be at least {settings.MIN_PASSWORD_LENGTH} characters")
-        if not re.search(r"[A-Z]", v):
-            raise ValueError("Password must contain at least one uppercase letter")
-        if not re.search(r"[a-z]", v):
-            raise ValueError("Password must contain at least one lowercase letter")
-        if not re.search(r"\d", v):
-            raise ValueError("Password must contain at least one digit")
-        return v
-
-class UserResponse(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
+class UserResponse(BaseResponse):
     id: str
     email: str
     name: str | None = None
@@ -75,9 +65,7 @@ class UserResponse(BaseModel):
 
 
 # Video
-class VideoResponse(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
+class VideoResponse(BaseResponse):
     id: str
     src: str
     label: str
@@ -86,12 +74,10 @@ class VideoResponse(BaseModel):
 
 
 # Annotation
-class AnnotationRequest(BaseModel):
+class AnnotationRequest(BaseRequest):
     segments: list[SegmentSchema] = []
 
-class AnnotationResponse(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
+class AnnotationResponse(BaseResponse):
     id: str
     assignment_id: str
     segments: list[SegmentSchema]
@@ -101,7 +87,7 @@ class AnnotationResponse(BaseModel):
 
 
 # Project
-class ProjectRequest(BaseModel):
+class ProjectRequest(BaseRequest):
     name: str
     description: str | None = None
     annotators_per_video: int
@@ -113,19 +99,18 @@ class ProjectRequest(BaseModel):
             raise ValueError("annotators_per_video must be at least 1")
         return v
 
-class ProjectResponse(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
+class ProjectResponse(BaseResponse):
     id: str
     name: str
     description: str | None = None
     annotators_per_video: int
+    members: list[UserResponse] = []
     created_at: datetime | None = None
 
-class ProjectMemberRequest(BaseModel):
+class ProjectMemberRequest(BaseRequest):
     email: str  # Add member by email instead of user_id
 
-class ProjectMemberResponse(BaseModel):
+class ProjectMemberResponse(BaseResponse):
     model_config = ConfigDict(from_attributes=True)
 
     id: str
@@ -137,11 +122,11 @@ class ProjectMemberResponse(BaseModel):
     name: str | None = None
 
 
-class ProjectVideoRequest(BaseModel):
+class ProjectVideoRequest(BaseRequest):
     video_id: str
 
 
-class ProjectVideoResponse(BaseModel):
+class ProjectVideoResponse(BaseResponse):
     model_config = ConfigDict(from_attributes=True)
 
     id: str
@@ -155,9 +140,7 @@ class ProjectVideoResponse(BaseModel):
     assignments: list[str] = []
 
 
-class AssignmentResponse(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
+class AssignmentResponse(BaseResponse):
     id: str
     project_video_id: str
     user_id: str
@@ -166,10 +149,10 @@ class AssignmentResponse(BaseModel):
 
 
 # Misc
-class SignedUrlResponse(BaseModel):
+class SignedUrlResponse(BaseResponse):
     signed_url: str
     expiration: int
 
-class HealthResponse(BaseModel):
+class HealthResponse(BaseResponse):
     status: str
     database: str
