@@ -1,4 +1,6 @@
-from fastapi import APIRouter, Depends, File, UploadFile, HTTPException
+import os
+
+from fastapi import APIRouter, Depends, File, UploadFile, HTTPException, Form
 
 from app.api.dependencies import get_video_service
 from app.database.models import User
@@ -12,6 +14,8 @@ router = APIRouter(prefix="/videos")
 @router.post("/upload", status_code=201, response_model=list[VideoResponse])
 def upload_video(
     file: UploadFile = File(...),
+    label: str = Form(...),
+    description: str | None = Form(None),
     _: User = Depends(require_role("admin")),
     video_service: VideoService = Depends(get_video_service),
 ) -> list[VideoResponse]:
@@ -19,8 +23,14 @@ def upload_video(
         raise HTTPException(status_code=400, detail="No filename provided")
     
     local_file_location = video_service.save_upload_locally(file.file, file.filename)
-    created_videos = video_service.upload_video(local_file_location)
-    return [VideoResponse.model_validate(v) for v in created_videos]
+
+    try:
+        created_videos = video_service.upload_video(local_file_location, label=label, description=description)
+        return [VideoResponse.model_validate(v) for v in created_videos]
+    except Exception as e:
+        if os.path.exists(local_file_location):
+            os.remove(local_file_location)
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get("", response_model=list[VideoResponse])

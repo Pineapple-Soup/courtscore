@@ -1,12 +1,12 @@
 import os
 import shutil
-from typing import BinaryIO, Sequence
 
 from sqlalchemy.orm import Session
+from typing import BinaryIO, Optional, Sequence
 
 from app.core.config import settings
 from app.core.context import ServiceContext
-from app.core.exceptions import ForbiddenError, VideoNotFoundError
+from app.core.exceptions import ForbiddenError, ProcessingError, VideoNotFoundError
 from app.database.models import Video
 from app.services.gcs import GCSService
 from app.services.preprocess import PreprocessService
@@ -19,17 +19,22 @@ class VideoService:
         self.gcs_service = gcs_service or GCSService()
         self.preprocess_service = preprocess_service
 
-    def _upload_multiple_videos(self, file_path_list: list[str]) -> list[Video]:
+    def _upload_multiple_videos(self, file_path_list: list[str], label: Optional[str], description: Optional[str]) -> list[Video]:
         uploaded_videos: list[Video] = []
-        for file_path in file_path_list:
-            id, gcp_path = self.gcs_service.upload_video(file_path)
-            new_video = Video(id=id, src=gcp_path, label=os.path.splitext(os.path.basename(file_path))[0])
-            self.db.add(new_video)
+        try:
+            for idx, file_path in enumerate(file_path_list):
+                id, gcp_path = self.gcs_service.upload_video(file_path)
+                new_video_label = f"{label} {idx+1}" if label else os.path.splitext(os.path.basename(file_path))[0]
+                new_video = Video(id=id, src=gcp_path, label=new_video_label, description=description)
+                self.db.add(new_video)
+                uploaded_videos.append(new_video)
             self.db.commit()
-            self.db.refresh(new_video)
-            uploaded_videos.append(new_video)
-        
-        return uploaded_videos
+            for v in uploaded_videos:
+                self.db.refresh(v)
+            return uploaded_videos
+        except Exception:
+            self.db.rollback()
+            raise ProcessingError("Failed to upload videos. Transaction rolled back.")
 
     def _cleanup_files(self, file_path_list: list[str]) -> None:
         for file_path in file_path_list:
@@ -66,11 +71,11 @@ class VideoService:
         video = self.get(video_id)
         return self.gcs_service.generate_signed_url(str(video.src))
     
-    def upload_video(self, file_path: str) -> list[Video]:
+    def upload_video(self, file_path: str, label: Optional[str], description: Optional[str] = None) -> list[Video]:
         self._require_admin()
 
         file_path_list: list[str] = self.preprocess_service.process_video(file_path, settings.OUTPUT_PATH)
-        created_videos: list[Video] = self._upload_multiple_videos(file_path_list)
+        created_videos: list[Video] = self._upload_multiple_videos(file_path_list, label, description)
         self._cleanup_files(file_path_list + [file_path])
 
         return created_videos
