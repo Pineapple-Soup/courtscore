@@ -1,16 +1,18 @@
-from sqlalchemy.orm import Session
-from typing import Optional
+from sqlalchemy.orm import Session, selectinload
+from typing import Optional, cast
 from uuid import uuid4
 
 from app.core.context import ServiceContext
 from app.core.exceptions import ConflictError, ForbiddenError, NotFoundError
 from app.database.models import (
+    Assignment,
     Project,
     ProjectMember,
     ProjectVideo,
     Video,
     User,
 )
+from collections import defaultdict
 
 
 class ProjectService:
@@ -25,7 +27,18 @@ class ProjectService:
         Raises:
             NotFoundError: If project doesn't exist
         """
-        project = self.db.query(Project).filter(Project.id == project_id).first()
+        project = (
+            self.db.query(Project)
+            .options(
+                selectinload(Project.project_members),
+                selectinload(Project.project_videos).options(
+                    selectinload(ProjectVideo.video),
+                    selectinload(ProjectVideo.assignments),
+                ),
+            )
+            .filter(Project.id == project_id)
+            .first()
+        )
         if not project:
             raise NotFoundError("Project not found")
         return project
@@ -40,8 +53,12 @@ class ProjectService:
         """
         List all videos linked to a project.
         """
-        return (self.db
-            .query(ProjectVideo)
+        return (
+            self.db.query(ProjectVideo)
+            .options(
+                selectinload(ProjectVideo.video),
+                selectinload(ProjectVideo.assignments),
+            )
             .filter(ProjectVideo.project_id == project_id)
             .all()
         )
@@ -68,13 +85,14 @@ class ProjectService:
 
     # ==================== Project Management ====================
 
-    def create_project(self, project_name: str, description: str, annotators_per_video: int) -> Project:
+    def create_project(self, project_name: str, description: str, behaviors: list[dict[str, str]], annotators_per_video: int) -> Project:
         """
         Create a new project.
 
         Args:
             project_name: Name of the project
             description: Description of the project
+            behaviors: List of behaviors for the project
             annotators_per_video: Number of annotators per video
 
         Returns:
@@ -86,13 +104,13 @@ class ProjectService:
             id=str(uuid4()),
             name=project_name,
             description=description,
+            behaviors=behaviors,
             annotators_per_video=annotators_per_video,
         )
         
         self.db.add(project)
         self.db.commit()
-        self.db.refresh(project)
-        return project
+        return self._get_project(str(project.id))
 
     def get_projects(self) -> list[Project]:
         """
@@ -130,7 +148,14 @@ class ProjectService:
 
         return project
 
-    def update_project(self, project_id: str, project_name: Optional[str] = None, description: Optional[str] = None, annotators_per_video: Optional[int] = None) -> Project:
+    def update_project(
+        self, 
+        project_id: str, 
+        project_name: Optional[str] = None, 
+        description: Optional[str] = None, 
+        behaviors: Optional[list[dict[str,str]]] = None, 
+        annotators_per_video: Optional[int] = None
+    ) -> Project:
         """
         Update project details.
         """
@@ -142,12 +167,13 @@ class ProjectService:
             setattr(project, "name", project_name)
         if description is not None:
             setattr(project, "description", description)
+        if behaviors is not None:
+            setattr(project, "behaviors", behaviors)
         if annotators_per_video is not None:
             setattr(project, "annotators_per_video", annotators_per_video)
 
         self.db.commit()
-        self.db.refresh(project)
-        return project
+        return self._get_project(project_id)
 
     def delete_project(self, project_id: str) -> None:
         """
@@ -160,15 +186,16 @@ class ProjectService:
 
     # ==================== Member Management ====================
 
-    def add_member(self, project_id: str, email: str) -> ProjectMember:
+    def add_member(self, project_id: str, user_id: str) -> Project:
         """
         Add a user to a project.
 
         Args:
             project_id: Project to add member to
+            user_id: ID of the user to add
 
         Returns:
-            ProjectMember record
+            User record
 
         Raises:
             ForbiddenError: If requester is not admin
@@ -177,10 +204,9 @@ class ProjectService:
         """
         self._require_admin()
 
-        # Look up user by email
-        user = self.db.query(User).filter(User.email == email).first()
+        user = self.db.query(User).filter(User.id == user_id).first()
         if not user:
-            raise NotFoundError("User with that email not found")
+            raise NotFoundError("User with that ID not found")
 
         # Check if already a member
         existing = (self.db
@@ -194,11 +220,10 @@ class ProjectService:
         if existing:
             raise ConflictError("User is already a member of this project")
 
-        member = ProjectMember(id=str(uuid4()), project_id=project_id, user_id=user.id)
-        self.db.add(member)
+        project_member = ProjectMember(id=str(uuid4()), project_id=project_id, user_id=user.id)
+        self.db.add(project_member)
         self.db.commit()
-        self.db.refresh(member)
-        return ProjectMember
+        return self._get_project(project_id)
 
     def list_members(self, project_id: str) -> list[ProjectMember]:
         """
@@ -209,21 +234,16 @@ class ProjectService:
         """
         self._require_admin()
 
-        members = (
-            self.db
-            .query(ProjectMember, User)
-            .join(User, ProjectMember.user_id == User.id)
-            .filter(ProjectMember.project_id == project_id)
-            .all()
-        )
+        project: Project = self._get_project(project_id)
+        return cast(list[ProjectMember], project.project_members)
 
-        return members
-
-    def remove_member(self, project_id: str, user_id: str) -> None:
+    def remove_member(self, project_id: str, user_id: str) -> Project:
         """
-        Remove a member from a project.
+        Remove a member from a project. Preserves submitted annotations for research record.
 
-        Preserves submitted annotations for research record.
+        Args:
+            project_id: Project to remove member from
+            user_id: ID of the user to remove
 
         Raises:
             ForbiddenError: If requester is not an admin
@@ -246,12 +266,20 @@ class ProjectService:
         # Remove membership
         self.db.delete(member)
         self.db.commit()
+        return self._get_project(project_id)
 
     # ==================== Video Management ====================
 
-    def link_video(self, project_id: str, video_id: str) -> ProjectVideo:
+    def link_video(self, project_id: str, video_id: str) -> Project:
         """
         Link a video from the library to a project.
+
+        Args:
+            project_id: Project to link video to
+            video_id: Video to link
+
+        Returns:
+            Updated project record
 
         Raises:
             ForbiddenError: If requester is not owner
@@ -283,26 +311,26 @@ class ProjectService:
 
         self.db.add(project_video)
         self.db.commit()
-        self.db.refresh(project_video)
-
-        return project_video
+        return self._get_project(project_id)
 
     def list_linked_videos(self, project_id: str) -> list[ProjectVideo]:
         """
         List all videos linked to a project.
         """
         self._require_admin()
-        return (self.db
-            .query(ProjectVideo)
-            .filter(ProjectVideo.project_id == project_id)
-            .all()
-        )
+        project = self._get_project(project_id)
+        return cast(list[ProjectVideo], project.project_videos)
 
-    def unlink_video(self, project_id: str, project_video_id: str) -> None:
+    def unlink_video(self, project_id: str, video_id: str) -> Project:
         """
-        Remove a video from a project.
+        Remove a video from a project. Cascades to delete assignments and annotations.
 
-        Cascades to delete assignments and annotations.
+        Args:
+            project_id: Project to remove video from
+            video_id: ID of the video to remove
+
+        Returns:
+            Updated project record
 
         Raises:
             ForbiddenError: If requester is not an admin
@@ -310,17 +338,18 @@ class ProjectService:
         """
         self._require_admin()
 
-        pv = (self.db
+        project_video = (self.db
             .query(ProjectVideo)
             .filter(
-                ProjectVideo.id == project_video_id,
+                ProjectVideo.video_id == video_id,
                 ProjectVideo.project_id == project_id,
             )
             .first()
         )
 
-        if not pv:
+        if not project_video:
             raise NotFoundError("Video not found in project")
 
-        self.db.delete(pv)
+        self.db.delete(project_video)
         self.db.commit()
+        return self._get_project(project_id)

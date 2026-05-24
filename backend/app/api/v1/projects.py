@@ -2,7 +2,16 @@ from fastapi import APIRouter, Depends
 
 from app.api.dependencies import get_assignment_service, get_project_service
 from app.database.models import User
-from app.database.schemas import AssignmentResponse, ProjectRequest, ProjectResponse, ProjectMemberResponse, ProjectVideoResponse
+from app.database.schemas import (
+    AssignmentResponse,
+    Behavior,
+    ProjectRequest,
+    ProjectResponse,
+    ProjectMemberRequest,
+    ProjectMemberResponse,
+    ProjectVideoRequest,
+    ProjectVideoResponse,
+)
 from app.services.auth import require_role
 from app.services.assignment import AssignmentService
 from app.services.project import ProjectService
@@ -20,7 +29,14 @@ def create_project(
 
     Returns the created project.
     """
-    project = project_service.create_project(payload.name, str(payload.description), payload.annotators_per_video)
+    # Validate behaviors if provided
+    behaviors = []
+    if payload.behaviors is not None:
+        for behavior in payload.behaviors:
+            Behavior.model_validate(behavior)
+            behaviors.append(behavior.model_dump())
+
+    project = project_service.create_project(payload.name, str(payload.description), behaviors, payload.annotators_per_video)
     return ProjectResponse.model_validate(project)
 
 @router.get("", response_model=list[ProjectResponse], status_code=200)
@@ -38,11 +54,11 @@ def list_projects(
 @router.get("/{project_id}", response_model=ProjectResponse, status_code=200)
 def get_project(
     project_id: str,
-    _: User = Depends(require_role("user")),
+    _: User = Depends(require_role("admin")),
     project_service: ProjectService = Depends(get_project_service),
 ) -> ProjectResponse:
     """
-    Get a specific project by ID. User access required.
+    Get a specific project by ID. Admin access required.
 
     Returns the project corresponding to project_id.
     """
@@ -61,9 +77,17 @@ def update_project(
 
     Returns the updated project.
     """
+    # Validate behaviors if provided
+    behaviors = []
+    if payload.behaviors is not None:
+        for behavior in payload.behaviors:
+            Behavior.model_validate(behavior)
+            behaviors.append(behavior.model_dump())
+
     project = project_service.update_project(
         project_id,
         project_name=payload.name,
+        behaviors=behaviors,
         description=payload.description,
         annotators_per_video=payload.annotators_per_video,
     )
@@ -94,35 +118,35 @@ def list_project_members(
     members = project_service.list_members(project_id)
     return [ProjectMemberResponse.model_validate(m) for m in members]
 
-@router.post("/{project_id}/members", response_model=ProjectResponse, status_code=200)
+@router.post("/{project_id}/members", response_model=ProjectResponse, status_code=201)
 def add_project_member(
     project_id: str,
-    member_email: str,
+    payload: ProjectMemberRequest,
     _: User = Depends(require_role("admin")),
     project_service: ProjectService = Depends(get_project_service),
 ) -> ProjectResponse:
     """
-    Add a member to a project by email. Admin access required.
+    Add a member to a project by user id. Admin access required.
 
     Returns the updated project.
     """
-    project = project_service.add_member(project_id, member_email)
-    return ProjectResponse.model_validate(project)
+    updated_project = project_service.add_member(project_id, payload.user_id)
+    return ProjectResponse.model_validate(updated_project)
 
 @router.delete("/{project_id}/members", response_model=ProjectResponse, status_code=200)
 def remove_project_member(
     project_id: str,
-    member_id: str,
+    payload: ProjectMemberRequest,
     _: User = Depends(require_role("admin")),
     project_service: ProjectService = Depends(get_project_service),
 ) -> ProjectResponse:
     """
-    Remove a member from a project by member ID. Admin access required.
+    Remove a member from a project by user id. Admin access required.
 
     Returns the updated project.
     """
-    project = project_service.remove_member(project_id, member_id)
-    return ProjectResponse.model_validate(project)
+    updated_project =project_service.remove_member(project_id, payload.user_id)
+    return ProjectResponse.model_validate(updated_project)
 
 @router.get("/{project_id}/videos", response_model=list[ProjectVideoResponse], status_code=200)
 def list_project_videos(
@@ -136,34 +160,36 @@ def list_project_videos(
     Returns a list of project videos.
     """
     videos = project_service.list_linked_videos(project_id)
+    print(videos)
     return [ProjectVideoResponse.model_validate(v) for v in videos]
 
-@router.post("/{project_id}/videos", response_model=ProjectVideoResponse, status_code=201)
+@router.post("/{project_id}/videos", response_model=ProjectResponse, status_code=201)
 def link_video_to_project(
     project_id: str,
-    video_id: str,
+    payload: ProjectVideoRequest,
     _: User = Depends(require_role("admin")),
     project_service: ProjectService = Depends(get_project_service),
-) -> ProjectVideoResponse:
+) -> ProjectResponse:
     """
     Link a video to a project. Admin access required.
 
     Returns the created project-video link.
     """
-    project_video = project_service.link_video(project_id, video_id)
-    return ProjectVideoResponse.model_validate(project_video)
+    updated_project = project_service.link_video(project_id, payload.video_id)
+    return ProjectResponse.model_validate(updated_project)
 
-@router.delete("/{project_id}/videos", status_code=204)
+@router.delete("/{project_id}/videos", response_model=ProjectResponse, status_code=200)
 def unlink_video_from_project(
     project_id: str,
-    project_video_id: str,
+    payload: ProjectVideoRequest,
     _: User = Depends(require_role("admin")),
     project_service: ProjectService = Depends(get_project_service),
-) -> None:
+) -> ProjectResponse:
     """
     Unlink a video from a project. Admin access required.
     """
-    project_service.unlink_video(project_id, project_video_id)
+    updated_project = project_service.unlink_video(project_id, payload.video_id)
+    return ProjectResponse.model_validate(updated_project)
 
 @router.get("/{project_id}/assignments", response_model=list[AssignmentResponse], status_code=200)
 def get_user_assignments(
