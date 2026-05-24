@@ -2,11 +2,11 @@
 
 import { useState } from "react";
 import { Plus } from "lucide-react";
-import { useProjectStore } from "@/store/useProjectStore";
 import { Behavior } from "@/types/behavior";
+import { useProjectStore } from "@/store/useProjectStore";
 import BehaviorManager from "@/components/BehaviorManager";
-import ProjectDetails from "@/components/ProjectDetails";
 import Modal from "@/components/Modal";
+import ProjectDetails from "@/components/ProjectDetails";
 import SystemError from "@/components/SystemError";
 
 const ProjectCreate = () => {
