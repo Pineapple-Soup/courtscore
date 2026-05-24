@@ -1,29 +1,34 @@
 import re
+
 from datetime import datetime
-from enum import Enum
 from pydantic import BaseModel, ConfigDict, EmailStr, field_validator, model_validator
 from pydantic.alias_generators import to_camel, to_snake
-from typing import Self
+from typing import Optional, Self
+
 from app.core.config import settings
+from app.core.enums import VideoStatusEnum
 
-
-class VideoStatusEnum(str, Enum):
-    NOT_STARTED = "Not Started"
-    IN_PROGRESS = "In Progress"
-    COMPLETED = "Completed"
 
 class BaseRequest(BaseModel):
-    model_config = ConfigDict(alias_generator=to_camel, from_attributes=True)
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True, from_attributes=True)
 
 class BaseResponse(BaseModel):
-    model_config = ConfigDict(alias_generator=to_snake, from_attributes=True)
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True, from_attributes=True)
+
+# Behavior
+class Behavior(BaseModel):
+    name: str
+    hotkey: str
+    description: Optional[str] = None
+    threshold: Optional[int] = None
+
 
 # Segment
 class SegmentSchema(BaseRequest):
-    behavior: str
+    behavior: Behavior
     start_time: float
-    end_time: float | None = None
-    notes: str | None = None
+    end_time: Optional[float] = None
+    notes: Optional[str] = None
 
     @model_validator(mode="after")
     def validate_time_range(self) -> Self:
@@ -57,20 +62,21 @@ class SignupRequest(PasswordRequest):
     email: EmailStr
     name: str
 
+
+# User
 class UserResponse(BaseResponse):
     id: str
     email: str
-    name: str | None = None
+    name: Optional[str] = None
     role: str
-
 
 # Video
 class VideoResponse(BaseResponse):
     id: str
     src: str
     label: str
-    description: str | None = None
-    created_at: datetime | None = None
+    description: Optional[str] = None
+    created_at: Optional[datetime] = None
 
 
 # Annotation
@@ -82,14 +88,53 @@ class AnnotationResponse(BaseResponse):
     assignment_id: str
     segments: list[SegmentSchema]
     submitted: bool = False
-    submitted_at: datetime | None = None
-    updated_at: datetime
+    submitted_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+
+
+# Assignment
+class AssignmentResponse(BaseResponse):
+    id: str
+    project_video_id: str
+    user_id: str
+    created_at: Optional[datetime] = None
+    status: VideoStatusEnum = VideoStatusEnum.NOT_STARTED
+
+
+# ProjectMember
+class ProjectMemberRequest(BaseRequest):
+    user_id: str
+
+class ProjectMemberResponse(BaseResponse):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    project_id: str
+    user_id: str
+    user: UserResponse
+    created_at: Optional[datetime] = None
+
+
+# ProjectVideo
+class ProjectVideoRequest(BaseRequest):
+    video_id: str
+
+class ProjectVideoResponse(BaseResponse):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    project_id: str
+    video_id: str
+    video: VideoResponse
+    assignments: list[AssignmentResponse] = []
+    created_at: Optional[datetime] = None
 
 
 # Project
 class ProjectRequest(BaseRequest):
     name: str
-    description: str | None = None
+    description: Optional[str] = None
+    behaviors: Optional[list[Behavior]] = None
     annotators_per_video: int
 
     @field_validator("annotators_per_video")
@@ -102,50 +147,13 @@ class ProjectRequest(BaseRequest):
 class ProjectResponse(BaseResponse):
     id: str
     name: str
-    description: str | None = None
+    description: Optional[str] = None
     annotators_per_video: int
-    members: list[UserResponse] = []
-    created_at: datetime | None = None
-
-class ProjectMemberRequest(BaseRequest):
-    email: str  # Add member by email instead of user_id
-
-class ProjectMemberResponse(BaseResponse):
-    model_config = ConfigDict(from_attributes=True)
-
-    id: str
-    project_id: str
-    user_id: str
-    created_at: datetime | None = None
-    # Joined user fields
-    email: str | None = None
-    name: str | None = None
-
-
-class ProjectVideoRequest(BaseRequest):
-    video_id: str
-
-
-class ProjectVideoResponse(BaseResponse):
-    model_config = ConfigDict(from_attributes=True)
-
-    id: str
-    project_id: str
-    video_id: str
-    created_at: datetime | None = None
-    # Joined video fields
-    label: str | None = None
-    src: str | None = None
-    # Assignment info
-    assignments: list[str] = []
-
-
-class AssignmentResponse(BaseResponse):
-    id: str
-    project_video_id: str
-    user_id: str
-    created_at: datetime | None = None
-    status: VideoStatusEnum = VideoStatusEnum.NOT_STARTED
+    behaviors: Optional[list[Behavior]] = None
+    project_members: list[ProjectMemberResponse] = []
+    project_videos: list[ProjectVideoResponse] = []
+    assignments: list[AssignmentResponse] = []
+    created_at: Optional[datetime] = None
 
 
 # Misc

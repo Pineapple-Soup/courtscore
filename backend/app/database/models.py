@@ -1,6 +1,7 @@
 from app.database.db import Base
 from sqlalchemy import Boolean, Column, ForeignKey, Integer, String, TIMESTAMP, JSON, UniqueConstraint
 from sqlalchemy.sql import func
+from sqlalchemy.orm import relationship
 
 
 class Video(Base):
@@ -15,6 +16,8 @@ class Video(Base):
     label = Column(String, nullable=False)    
     description = Column(String, nullable=True)
     created_at = Column(TIMESTAMP, server_default=func.now())
+
+    project_links = relationship("ProjectVideo", back_populates="video")
 
 
 class User(Base):
@@ -33,6 +36,15 @@ class User(Base):
     last_login_at = Column(TIMESTAMP, nullable=True)
     created_at = Column(TIMESTAMP, server_default=func.now())
 
+    project_links = relationship("ProjectMember", back_populates="user")
+    # projects = relationship(
+    #     "Project",
+    #     secondary="project_members",
+    #     back_populates="members",
+    #     viewonly=True,
+    # )
+    assignments = relationship("Assignment", back_populates="user")
+
 
 class Project(Base):
     """
@@ -44,8 +56,18 @@ class Project(Base):
     id = Column(String, primary_key=True, index=True)
     name = Column(String, nullable=False)
     description = Column(String, nullable=True)
+    behaviors = Column(JSON, nullable=True)
     annotators_per_video = Column(Integer, nullable=False)
     created_at = Column(TIMESTAMP, server_default=func.now())
+
+    project_members = relationship("ProjectMember", back_populates="project", cascade="all, delete-orphan")
+    # members = relationship(
+    #     "User",
+    #     secondary="project_members",
+    #     back_populates="projects",
+    #     viewonly=True,
+    # )
+    project_videos = relationship("ProjectVideo", back_populates="project", cascade="all, delete-orphan")
 
 
 class ProjectMember(Base):
@@ -59,6 +81,9 @@ class ProjectMember(Base):
     project_id = Column(String, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True)
     user_id = Column(String, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     created_at = Column(TIMESTAMP, server_default=func.now())
+
+    project = relationship("Project", back_populates="project_members")
+    user = relationship("User", back_populates="project_links")
 
     __table_args__ = (
         UniqueConstraint("project_id", "user_id", name="unique_project_member"),
@@ -77,6 +102,10 @@ class ProjectVideo(Base):
     video_id = Column(String, ForeignKey("videos.id", ondelete="CASCADE"), nullable=False, index=True)
     created_at = Column(TIMESTAMP, server_default=func.now())
 
+    project = relationship("Project", back_populates="project_videos")
+    video = relationship("Video", back_populates="project_links")
+    assignments = relationship("Assignment", back_populates="project_video", cascade="all, delete-orphan")
+
     __table_args__ = (
         UniqueConstraint("project_id", "video_id", name="unique_project_video"),
     )
@@ -94,6 +123,10 @@ class Assignment(Base):
     user_id = Column(String, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     status = Column(String, nullable=False, default="Not Started")
     created_at = Column(TIMESTAMP, server_default=func.now())
+
+    project_video = relationship("ProjectVideo", back_populates="assignments")
+    user = relationship("User", back_populates="assignments")
+    annotation = relationship("Annotation", back_populates="assignment", uselist=False, cascade="all, delete-orphan")
 
     __table_args__ = (
         UniqueConstraint("project_video_id", "user_id", name="unique_video_assignment"),
@@ -114,3 +147,5 @@ class Annotation(Base):
     submitted_at = Column(TIMESTAMP, nullable=True)
     updated_at = Column(TIMESTAMP, nullable=True)
     created_at = Column(TIMESTAMP, server_default=func.now())
+
+    assignment = relationship("Assignment", back_populates="annotation")
