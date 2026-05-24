@@ -3,6 +3,9 @@
 import { useState } from "react";
 import { Plus } from "lucide-react";
 import { useProjectStore } from "@/store/useProjectStore";
+import { Behavior } from "@/types/behavior";
+import BehaviorManager from "@/components/BehaviorManager";
+import ProjectDetails from "@/components/ProjectDetails";
 import Modal from "@/components/Modal";
 import SystemError from "@/components/SystemError";
 
@@ -12,6 +15,7 @@ const ProjectCreate = () => {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [annotators, setAnnotators] = useState<number>(2);
+  const [behaviors, setBehaviors] = useState<Behavior[]>([]);
 
   const loading = useProjectStore((s) => s.loading);
   const error = useProjectStore((s) => s.error);
@@ -20,6 +24,7 @@ const ProjectCreate = () => {
   const resetForm = () => {
     setName("");
     setDescription("");
+    setBehaviors([]);
     setAnnotators(2);
   };
 
@@ -33,6 +38,7 @@ const ProjectCreate = () => {
         name: name.trim(),
         description: description.trim(),
         annotatorsPerVideo: annotators,
+        behaviors: behaviors,
       });
       resetForm();
     } catch (err) {
@@ -63,46 +69,19 @@ const ProjectCreate = () => {
                 onCreate();
               }}
               className='w-full max-w-md mx-auto space-y-4 text-left'>
-              <div className='text-input'>
-                <label className='block text-xs font-bold uppercase tracking-widest mb-2'>
-                  Project Title
-                </label>
-                <input
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  className='w-full px-3 py-2 rounded-md border border-border focus:outline-none focus:ring-2 focus:ring-ring'
-                  placeholder='e.g. Drosophilia Courtship Experiments'
-                  required
-                />
-              </div>
+              <ProjectDetails
+                name={name}
+                description={description}
+                annotatorsPerVideo={annotators}
+                setName={setName}
+                setDescription={setDescription}
+                setAnnotatorsPerVideo={setAnnotators}
+              />
 
-              <div className='text-input'>
-                <label className='block text-xs font-bold uppercase tracking-widest mb-2'>
-                  Description
-                </label>
-                <textarea
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  className='w-full px-3 py-2 rounded-md border border-border font-mono focus:outline-none focus:ring-2 focus:ring-ring'
-                  rows={3}
-                  placeholder='Optional project description'
-                />
-              </div>
-
-              <div className='text-input'>
-                <label className='block text-xs font-bold uppercase tracking-widest mb-2'>
-                  Annotators per Video
-                </label>
-                <input
-                  type='number'
-                  min={1}
-                  value={annotators}
-                  onChange={(e) =>
-                    setAnnotators(Math.max(1, Number(e.target.value)))
-                  }
-                  className='w-24 px-3 py-2 rounded-md border border-border font-mono focus:outline-none focus:ring-2 focus:ring-ring'
-                />
-              </div>
+              <BehaviorManager
+                behaviors={behaviors}
+                setBehaviors={setBehaviors}
+              />
 
               {error && <SystemError message={error} />}
 
