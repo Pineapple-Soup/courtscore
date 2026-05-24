@@ -1,17 +1,8 @@
-export enum Behavior {
-  ORIENTING = 1,
-  FOLLOWING,
-  TAPPING,
-  SINGING,
-  LICKING,
-  ATT_COPULATION,
-  SUC_COPULATION,
-}
-
-export interface DurationBehavior {
-  id: string;
-  title: string;
+export interface Behavior {
+  name: string;
+  hotkey: string;
   description?: string;
+  threshold?: number;
 }
 
 export enum BehaviorStatus {
