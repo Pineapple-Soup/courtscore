@@ -160,7 +160,6 @@ def list_project_videos(
     Returns a list of project videos.
     """
     videos = project_service.list_linked_videos(project_id)
-    print(videos)
     return [ProjectVideoResponse.model_validate(v) for v in videos]
 
 @router.post("/{project_id}/videos", response_model=ProjectResponse, status_code=201)

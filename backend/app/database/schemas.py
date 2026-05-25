@@ -2,7 +2,7 @@ import re
 
 from datetime import datetime
 from pydantic import BaseModel, ConfigDict, EmailStr, field_validator, model_validator
-from pydantic.alias_generators import to_camel, to_snake
+from pydantic.alias_generators import to_camel
 from typing import Optional, Self
 
 from app.core.config import settings
