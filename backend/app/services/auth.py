@@ -52,10 +52,15 @@ def create_access_token(user_id: str, expires_in: Optional[int] = None) -> str:
 
 def decode_access_token(token: str) -> Mapping:
     try:
-        payload = jwt.decode(token, settings.AUTH_JWT_SECRET, algorithms=[ALGORITHM])
+        payload = jwt.decode(
+            token,
+            settings.AUTH_JWT_SECRET,
+            algorithms=[ALGORITHM],
+            options={"leeway": 60},
+        )
         return payload
-    except JWTError:
-        raise HTTPException(status_code=401, detail="Invalid authentication token")
+    except JWTError as e:
+        raise HTTPException(status_code=401, detail=f"Invalid authentication token: {str(e)}")
 
 async def exchange_code_for_tokens(code: str):
     token_url = "https://oauth2.googleapis.com/token"
