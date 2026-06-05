@@ -2,6 +2,7 @@ from app.database.db import Base
 from sqlalchemy import Boolean, Column, ForeignKey, Integer, String, TIMESTAMP, JSON, UniqueConstraint
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
+from typing import cast
 
 
 class Video(Base):
@@ -37,13 +38,11 @@ class User(Base):
     created_at = Column(TIMESTAMP, server_default=func.now())
 
     project_links = relationship("ProjectMember", back_populates="user")
-    # projects = relationship(
-    #     "Project",
-    #     secondary="project_members",
-    #     back_populates="members",
-    #     viewonly=True,
-    # )
     assignments = relationship("Assignment", back_populates="user")
+
+    @property
+    def project_count(self) -> int:
+        return len(cast(list["ProjectMember"], self.project_links))
 
 
 class Project(Base):
@@ -61,12 +60,6 @@ class Project(Base):
     created_at = Column(TIMESTAMP, server_default=func.now())
 
     project_members = relationship("ProjectMember", back_populates="project", cascade="all, delete-orphan")
-    # members = relationship(
-    #     "User",
-    #     secondary="project_members",
-    #     back_populates="projects",
-    #     viewonly=True,
-    # )
     project_videos = relationship("ProjectVideo", back_populates="project", cascade="all, delete-orphan")
 
 
