@@ -19,6 +19,7 @@ import ProjectCreate from "@/components/ProjectCreate";
 import ProjectList from "@/components/ProjectList";
 import VideoCreate from "@/components/VideoCreate";
 import VideoList from "@/components/VideoList";
+import UserList from "@/components/UserList";
 
 const Dashboard = () => {
   const router = useRouter();
@@ -150,7 +151,7 @@ const Dashboard = () => {
                 </Panel>
               ) : (
                 <Panel icon={<Users size={20} />} title='Platform Users'>
-                  Coming Soon!
+                  <UserList />
                 </Panel>
               )}
             </div>

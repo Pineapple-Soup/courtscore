@@ -69,6 +69,7 @@ class UserResponse(BaseResponse):
     email: str
     name: Optional[str] = None
     role: str
+    project_count: Optional[int] = 0
 
 # Video
 class VideoResponse(BaseResponse):

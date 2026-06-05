@@ -21,3 +21,11 @@ def promote_user(user_id: str,
  _: User = Depends(require_role("admin")), user_service: UserService = Depends(get_user_service)) -> UserResponse:
     user = user_service.promote_to_admin(user_id)
     return UserResponse.model_validate(user)
+
+@router.delete("/{user_id}", status_code=204)
+def delete_user(
+    user_id: str,
+    _: User = Depends(require_role("admin")),
+    user_service: UserService = Depends(get_user_service),
+) -> None:
+    user_service.delete_user(user_id)
