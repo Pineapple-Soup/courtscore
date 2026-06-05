@@ -76,6 +76,7 @@ class VideoResponse(BaseResponse):
     src: str
     label: str
     description: Optional[str] = None
+    link_count: int = 0
     created_at: Optional[datetime] = None
 
 
@@ -93,10 +94,21 @@ class AnnotationResponse(BaseResponse):
 
 
 # Assignment
+class UpdateAssignmentRequest(BaseRequest):
+    status: VideoStatusEnum = VideoStatusEnum.NOT_STARTED
+
 class AssignmentResponse(BaseResponse):
     id: str
     project_video_id: str
     user_id: str
+    created_at: Optional[datetime] = None
+    status: VideoStatusEnum = VideoStatusEnum.NOT_STARTED
+
+class AssignmentSummaryResponse(BaseResponse):
+    id: str
+    project_name: str
+    user_name: str
+    video_label: str
     created_at: Optional[datetime] = None
     status: VideoStatusEnum = VideoStatusEnum.NOT_STARTED
 
@@ -126,7 +138,6 @@ class ProjectVideoResponse(BaseResponse):
     project_id: str
     video_id: str
     video: VideoResponse
-    assignments: list[AssignmentResponse] = []
     created_at: Optional[datetime] = None
 
 
@@ -152,8 +163,31 @@ class ProjectResponse(BaseResponse):
     behaviors: Optional[list[Behavior]] = None
     project_members: list[ProjectMemberResponse] = []
     project_videos: list[ProjectVideoResponse] = []
-    assignments: list[AssignmentResponse] = []
     created_at: Optional[datetime] = None
+
+
+# Reporting
+class FlaggedBehavior(BaseResponse):
+    behavior_name: str
+    threshold: int
+    counts: list[int]
+    difference: int
+
+
+class AssignmentReport(BaseResponse):
+    assignment_id: str
+    user_id: str
+    user_name: str
+    status: str
+    updated_at: Optional[datetime] = None
+    segment_counts: dict[str, int]
+
+
+class ProjectVideoReport(BaseResponse):
+    video_id: str
+    video_label: str
+    assignments: list[AssignmentReport]
+    flags: list[FlaggedBehavior]
 
 
 # Misc

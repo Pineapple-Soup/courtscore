@@ -1,10 +1,14 @@
+from sqlalchemy.dialects.postgresql import Any
+from collections import defaultdict
+from sqlalchemy.orm import joinedload
 from sqlalchemy.orm import Session, selectinload
-from typing import Optional, cast
+from typing import Dict, Optional, cast
 from uuid import uuid4
 
 from app.core.context import ServiceContext
 from app.core.exceptions import ConflictError, ForbiddenError, NotFoundError
 from app.database.models import (
+    Annotation,
     Assignment,
     Project,
     ProjectMember,
@@ -12,7 +16,6 @@ from app.database.models import (
     Video,
     User,
 )
-from collections import defaultdict
 
 
 class ProjectService:
@@ -32,8 +35,11 @@ class ProjectService:
             .options(
                 selectinload(Project.project_members),
                 selectinload(Project.project_videos).options(
-                    selectinload(ProjectVideo.video),
-                    selectinload(ProjectVideo.assignments),
+                    joinedload(ProjectVideo.video),
+                    selectinload(ProjectVideo.assignments).options(
+                        joinedload(Assignment.annotation),
+                        joinedload(Assignment.user),
+                    ),
                 ),
             )
             .filter(Project.id == project_id)
@@ -82,6 +88,21 @@ class ProjectService:
 
         if not member:
             raise ForbiddenError("Must be a project member to access this resource")
+
+    def _has_assignments(self, project_id: str) -> bool:
+        assignment = (
+            self.db.query(Assignment)
+            .join(ProjectVideo, Assignment.project_video_id == ProjectVideo.id)
+            .filter(ProjectVideo.project_id == project_id)
+            .first()
+        )
+        return assignment is not None
+
+    def _ensure_resources_unlocked(self, project_id: str, operation: str) -> None:
+        if self._has_assignments(project_id):
+            raise ConflictError(
+                f"Cannot {operation} after assignments have been created for this project. Reset or delete assignments first."
+            )
 
     # ==================== Project Management ====================
 
@@ -162,6 +183,7 @@ class ProjectService:
         self._require_admin()
 
         project = self._get_project(project_id)
+        self._ensure_resources_unlocked(project_id, "change annotators per video")
 
         if project_name is not None:
             setattr(project, "name", project_name)
@@ -203,6 +225,7 @@ class ProjectService:
             ConflictError: If user is already a member of the project
         """
         self._require_admin()
+        self._ensure_resources_unlocked(project_id, "add project members")
 
         user = self.db.query(User).filter(User.id == user_id).first()
         if not user:
@@ -250,6 +273,7 @@ class ProjectService:
             NotFoundError: If user is not a member
         """
         self._require_admin()
+        self._ensure_resources_unlocked(project_id, "remove project members")
 
         member = (self.db
             .query(ProjectMember)
@@ -288,6 +312,7 @@ class ProjectService:
             BadRequestError: If not enough members for assignment
         """
         self._require_admin()
+        self._ensure_resources_unlocked(project_id, "link project videos")
 
         # Verify video exists
         video = self.db.query(Video).filter(Video.id == video_id).first()
@@ -321,6 +346,64 @@ class ProjectService:
         project = self._get_project(project_id)
         return cast(list[ProjectVideo], project.project_videos)
 
+    def list_linked_videos_detail(self, project_id: str) -> list[Dict[str, str | list]]:
+        self._require_admin()
+        project = self._get_project(project_id)
+        behavior_map = {behavior.get("name"): behavior for behavior in project.behaviors or []}
+
+        detailed_video_list = []
+        for project_video in project.project_videos:
+            detailed_video = {
+                "video_id": project_video.video.id,
+                "video_label": project_video.video.label,
+                "assignments": [],
+                "flags": [],
+            }
+
+            behavior_segment_counts: dict[str, list[int]] = defaultdict(list)
+            for assignment in project_video.assignments:
+                annotation: Annotation = assignment.annotation
+                segment_counts: Dict[str, int] = defaultdict(int)
+                if annotation and annotation.segments:
+                    for segment in annotation.segments:
+                        behavior_name = segment.get("behavior", {}).get("name")
+                        if behavior_name:
+                            segment_counts[behavior_name] += 1
+                
+                for behavior in project.behaviors or []:
+                    behavior_name = behavior.get("name")
+                    behavior_segment_counts[behavior_name].append(segment_counts[behavior_name])
+
+                detailed_video["assignments"].append(
+                    {
+                        "assignment_id": assignment.id,
+                        "user_id": assignment.user.id,
+                        "user_name": assignment.user.name,
+                        "status": assignment.status,
+                        "updated_at": annotation.updated_at if annotation else None,
+                        "segment_counts": dict(segment_counts),
+                    }
+                )
+
+            for name, counts in behavior_segment_counts.items():
+                behavior = behavior_map.get(name)
+                threshold = behavior.get("threshold") if behavior else None
+                if behavior and threshold is not None and len(counts) > 1:
+                    count_diff = max(counts) - min(counts)
+                    if count_diff > threshold:
+                        detailed_video["flags"].append(
+                            {
+                                "behavior_name": name,
+                                "threshold": threshold,
+                                "counts": counts,
+                                "difference": count_diff,
+                            }
+                        )
+            
+            detailed_video_list.append(detailed_video)
+
+        return detailed_video_list
+
     def unlink_video(self, project_id: str, video_id: str) -> Project:
         """
         Remove a video from a project. Cascades to delete assignments and annotations.
@@ -337,6 +420,7 @@ class ProjectService:
             NotFoundError: If project video doesn't exist
         """
         self._require_admin()
+        self._ensure_resources_unlocked(project_id, "unlink project videos")
 
         project_video = (self.db
             .query(ProjectVideo)

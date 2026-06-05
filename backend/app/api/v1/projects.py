@@ -1,22 +1,34 @@
 from fastapi import APIRouter, Depends
 
-from app.api.dependencies import get_assignment_service, get_project_service
+from app.api.dependencies import get_project_assignment_service, get_project_service
 from app.database.models import User
 from app.database.schemas import (
     AssignmentResponse,
+    AssignmentSummaryResponse,
     Behavior,
     ProjectRequest,
     ProjectResponse,
     ProjectMemberRequest,
     ProjectMemberResponse,
     ProjectVideoRequest,
+    ProjectVideoReport,
     ProjectVideoResponse,
 )
 from app.services.auth import require_role
-from app.services.assignment import AssignmentService
+from app.services.project_assignment import ProjectAssignmentService
 from app.services.project import ProjectService
 
 router = APIRouter(prefix="/projects", tags=["projects"])
+
+def _to_assignment_summary(assignment) -> AssignmentSummaryResponse:
+    return AssignmentSummaryResponse(
+        id=assignment.id,
+        project_name=assignment.project_video.project.name,
+        user_name=assignment.user.name,
+        video_label=assignment.project_video.video.label,
+        created_at=assignment.created_at,
+        status=assignment.status,
+    )
 
 @router.post("", response_model=ProjectResponse, status_code=201)
 def create_project(
@@ -190,17 +202,65 @@ def unlink_video_from_project(
     updated_project = project_service.unlink_video(project_id, payload.video_id)
     return ProjectResponse.model_validate(updated_project)
 
-@router.get("/{project_id}/assignments", response_model=list[AssignmentResponse], status_code=200)
-def get_user_assignments(
-    assignment_service: AssignmentService = Depends(get_assignment_service),
-) -> list[AssignmentResponse]:
-    assignments = assignment_service.list_user_assignments_in_project()
-    return [AssignmentResponse.model_validate(a) for a in assignments]
+@router.get("/{project_id}/videos/detail", response_model=list[ProjectVideoReport], status_code=200)
+def get_project_videos_detail(
+    project_id: str,
+    _: User = Depends(require_role("admin")),
+    project_service: ProjectService = Depends(get_project_service),
+) -> list[ProjectVideoReport]:
+    """
+    Get detailed information about all videos linked to a project. Admin access required.
+
+    Returns a list of detailed project video reports.
+    """
+    videos = project_service.list_linked_videos_detail(project_id)
+    return [ProjectVideoReport.model_validate(v) for v in videos]
+
+@router.get("/{project_id}/assignments/me", response_model=list[AssignmentSummaryResponse], status_code=200)
+def get_my_project_assignments(
+    project_assignment_service: ProjectAssignmentService = Depends(get_project_assignment_service)
+) -> list[AssignmentSummaryResponse]:
+    """
+    Get the current user's assignments for a specific project.
+
+    Returns a list of assignments for the user in the specified project.
+    """
+    assignments = project_assignment_service.list_my_project_assignments()
+    return [AssignmentSummaryResponse.model_validate(_to_assignment_summary(a)) for a in assignments]
+
+@router.get("/{project_id}/assignments", response_model=list[AssignmentSummaryResponse], status_code=200)
+def get_all_project_assignments(
+    project_id: str,
+    _: User = Depends(require_role("admin")),
+    project_assignment_service: ProjectAssignmentService = Depends(get_project_assignment_service),
+) -> list[AssignmentSummaryResponse]:
+    """
+    Get all assignments for a specific project. Admin access required.
+    
+    Returns a list of all assignments for the specified project.
+    """
+    assignments = project_assignment_service.list_project_assignments()
+    return [AssignmentSummaryResponse.model_validate(_to_assignment_summary(a)) for a in assignments]
 
 @router.post("/{project_id}/assignments", response_model=list[AssignmentResponse],status_code=201)
-def create_assignments(
+def create_project_assignments(
+    project_id: str,
     _: User = Depends(require_role("admin")),
-    assignment_service: AssignmentService = Depends(get_assignment_service),
+    project_assignment_service: ProjectAssignmentService = Depends(get_project_assignment_service),
 ) -> list[AssignmentResponse]:
-    assignments = assignment_service.create_balanced_assignments()
+    """
+    Create balanced assignments for a project. Admin access required.
+    """
+    assignments = project_assignment_service.create_project_assignments()
     return [AssignmentResponse.model_validate(a) for a in assignments]
+
+@router.delete("/{project_id}/assignments", status_code=204)
+def delete_project_assignments(
+    project_id: str,
+    _: User = Depends(require_role("admin")),
+    project_assignment_service: ProjectAssignmentService = Depends(get_project_assignment_service),
+) -> None:
+    """
+    Reset all assignments for a project by deleting them. Admin access required.
+    """
+    project_assignment_service.delete_project_assignments()
