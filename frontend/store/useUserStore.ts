@@ -43,6 +43,8 @@ interface UserState {
   setUser: (u: User | null) => void;
   setActiveTab: (tab: Tabs) => void;
   clearUser: () => void;
+  promoteUser: (userId: string) => Promise<void>;
+  deleteUser: (userId: string) => Promise<void>;
 }
 
 export const useUserStore = create<UserState>((set) => ({
@@ -100,6 +102,46 @@ export const useUserStore = create<UserState>((set) => ({
     }),
 
   setActiveTab: (tab: Tabs) => set({ activeTab: tab }),
+
+  promoteUser: async (userId: string) => {
+    try {
+      const res = await fetch(`http://localhost:8000/api/v1/users/promote?user_id=${userId}`, {
+        credentials: "include",
+      });
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.detail || `HTTP ${res.status}`);
+      }
+      const updatedUser = await res.json();
+      set((state) => ({
+        users: state.users
+          ? state.users.map((u) => (u.id === updatedUser.id ? { ...u, ...updatedUser } : u))
+          : null,
+      }));
+    } catch (err) {
+      console.error("promoteUser error", err);
+      throw err;
+    }
+  },
+
+  deleteUser: async (userId: string) => {
+    try {
+      const res = await fetch(`http://localhost:8000/api/v1/users/${userId}`, {
+        method: "DELETE",
+        credentials: "include",
+      });
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.detail || `HTTP ${res.status}`);
+      }
+      set((state) => ({
+        users: state.users ? state.users.filter((u) => u.id !== userId) : null,
+      }));
+    } catch (err) {
+      console.error("deleteUser error", err);
+      throw err;
+    }
+  },
 
   // Client-side searchUsers: backend list endpoints don't accept search params,
   // so fetch the full list (cached) and filter locally. Accepts an AbortSignal
