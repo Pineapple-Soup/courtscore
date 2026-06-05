@@ -3,34 +3,33 @@ import { Behavior, BehaviorStatus } from "@/types/behavior";
 import { Segment } from "@/types/segment";
 
 interface AnnotationState {
-  videoId: string;
   currentTime: number;
   duration: number;
   isPlaying: boolean;
   segments: Segment[];
-  setVideoId: (id: string) => void;
+  submitted: boolean;
+  submittedAt: string | null;
   setCurrentTime: (time: number) => void;
   setDuration: (duration: number) => void;
   setPlaying: (playing: boolean) => void;
   setSegments: (segments: Segment[]) => void;
+  setSubmitted: (submitted: boolean, submittedAt?: string | null) => void;
   mergeSegments: (segments: Segment[], newSegment: Segment) => Segment[];
   startBehavior: (behavior: Behavior, time: number) => void;
   endBehavior: (behavior: Behavior, time: number) => void;
   getBehaviorStatus: (behavior: Behavior) => BehaviorStatus;
   getActiveBehaviors: (time: number) => Behavior[];
   clearInProgress: () => void;
+  resetAnnotation: () => void;
 }
 
 export const useAnnotationStore = create<AnnotationState>((set, get) => ({
-  videoId: "",
   currentTime: 0,
   duration: 0,
   isPlaying: false,
   segments: [],
-
-  setVideoId: (id: string) => {
-    set({ videoId: id });
-  },
+  submitted: false,
+  submittedAt: null,
 
   setCurrentTime: (time: number) => {
     set({ currentTime: time });
@@ -48,6 +47,10 @@ export const useAnnotationStore = create<AnnotationState>((set, get) => ({
     set({ segments });
   },
 
+  setSubmitted: (submitted: boolean, submittedAt: string | null = null) => {
+    set({ submitted, submittedAt });
+  },
+
   mergeSegments: (segments: Segment[], newSegment: Segment): Segment[] => {
     const { currentTime } = get();
     const overlappingSegments = segments.filter(
@@ -55,7 +58,7 @@ export const useAnnotationStore = create<AnnotationState>((set, get) => ({
         seg.behavior === newSegment.behavior &&
         seg.endTime !== null &&
         Math.max(newSegment.startTime, seg.startTime) <=
-          Math.min(newSegment.endTime || currentTime, seg.endTime!)
+          Math.min(newSegment.endTime || currentTime, seg.endTime!),
     );
 
     if (overlappingSegments.length > 0) {
@@ -65,7 +68,7 @@ export const useAnnotationStore = create<AnnotationState>((set, get) => ({
         startTime: Math.min(...allSegments.map((s) => s.startTime)),
         endTime: Math.max(
           newSegment.endTime || currentTime,
-          ...allSegments.map((s) => s.endTime!)
+          ...allSegments.map((s) => s.endTime!),
         ),
         notes:
           allSegments
@@ -89,7 +92,7 @@ export const useAnnotationStore = create<AnnotationState>((set, get) => ({
           segment.behavior === behavior &&
           segment.endTime !== null &&
           time >= segment.startTime &&
-          time <= segment.endTime
+          time <= segment.endTime,
       );
 
       if (!isValid) return state;
@@ -108,7 +111,7 @@ export const useAnnotationStore = create<AnnotationState>((set, get) => ({
 
     set((state) => {
       const segmentIndex = state.segments.findIndex(
-        (segment) => segment.behavior === behavior && segment.endTime === null
+        (segment) => segment.behavior === behavior && segment.endTime === null,
       );
 
       if (segmentIndex === -1) return state;
@@ -124,7 +127,7 @@ export const useAnnotationStore = create<AnnotationState>((set, get) => ({
         };
         const updatedSegments = mergeSegments(
           segments.filter((_, idx) => idx !== segmentIndex),
-          newSegment
+          newSegment,
         );
         return { segments: updatedSegments };
       }
@@ -135,13 +138,13 @@ export const useAnnotationStore = create<AnnotationState>((set, get) => ({
     const { segments, currentTime } = get();
 
     const relevantSegments = segments.filter(
-      (segment: Segment) => segment.behavior === behavior
+      (segment: Segment) => segment.behavior === behavior,
     );
 
     if (
       relevantSegments.some(
         (segment: Segment) =>
-          segment.endTime === null && segment.startTime <= currentTime
+          segment.endTime === null && segment.startTime <= currentTime,
       )
     ) {
       return BehaviorStatus.ACTIVE;
@@ -152,7 +155,7 @@ export const useAnnotationStore = create<AnnotationState>((set, get) => ({
         (segment: Segment) =>
           segment.endTime !== null &&
           segment.startTime <= currentTime &&
-          segment.endTime! >= currentTime
+          segment.endTime! >= currentTime,
       )
     ) {
       return BehaviorStatus.COMPLETE;
@@ -168,12 +171,23 @@ export const useAnnotationStore = create<AnnotationState>((set, get) => ({
       .filter(
         (segment) =>
           segment.startTime <= time &&
-          (segment.endTime === null || segment.endTime >= time)
+          (segment.endTime === null || segment.endTime >= time),
       )
       .map((segment) => segment.behavior);
   },
 
   clearInProgress: () => {
     set({ segments: [] });
+  },
+
+  resetAnnotation: () => {
+    set({
+      currentTime: 0,
+      duration: 0,
+      isPlaying: false,
+      segments: [],
+      submitted: false,
+      submittedAt: null,
+    });
   },
 }));

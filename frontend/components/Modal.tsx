@@ -1,6 +1,6 @@
-import React, { useEffect } from "react";
-import { X } from "lucide-react";
 import ReactDOM from "react-dom";
+import { useEffect } from "react";
+import { X } from "lucide-react";
 
 interface ModalProps {
   title: string;
@@ -11,10 +11,7 @@ interface ModalProps {
 const Modal = ({ title, children, onClose }: ModalProps) => {
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      e.stopPropagation();
-      if (e.key === "Escape") {
-        onClose();
-      }
+      if (e.key === "Escape") onClose();
     };
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
@@ -22,21 +19,26 @@ const Modal = ({ title, children, onClose }: ModalProps) => {
 
   return ReactDOM.createPortal(
     <div
-      className='fixed inset-0 bg-black/75 flex items-center justify-center'
-      onClick={onClose}>
+      className='fixed inset-0 bg-muted/70 backdrop-blur-sm flex items-center justify-center p-4 z-50'
+      onClick={onClose}
+      role='dialog'
+      aria-modal='true'>
       <div
-        className='bg-white p-4 rounded-2xl w-96'
+        className='bg-background text-foreground p-6 rounded-lg w-full max-w-md border border-border shadow-main'
         onClick={(e) => e.stopPropagation()}>
         <div className='flex justify-between items-center mb-4'>
-          <h1 className='text-2xl font-bold'>{title}</h1>
-          <button onClick={onClose} className='cursor-pointer'>
+          <h1 className='text-xl font-bold tracking-tight'>{title}</h1>
+          <button
+            onClick={onClose}
+            aria-label='Close'
+            className='p-2 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/10 transition'>
             <X />
           </button>
         </div>
-        {children}
+        <div className='text-sm text-muted-foreground'>{children}</div>
       </div>
     </div>,
-    document.body
+    document.body,
   );
 };
 

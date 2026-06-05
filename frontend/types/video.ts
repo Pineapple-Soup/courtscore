@@ -2,7 +2,14 @@ export type VideoPlayerProps = {
   src: string;
 };
 
-export type Video = { id: string; src: string; label: string; status: string };
+export type Video = {
+  id: string;
+  src: string;
+  label: string;
+  description: string;
+  linkCount: number;
+  createdAt: string;
+};
 
 export enum VideoStatus {
   NOT_STARTED = "Not Started",

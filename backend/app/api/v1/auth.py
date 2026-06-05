@@ -9,25 +9,24 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.database.db import get_db
-from app.database.models import Users
+from app.database.models import User
 from app.database.schemas import (
     SignupRequest,
     LoginRequest,
-    SetPasswordRequest,
+    PasswordRequest,
     UserResponse,
-    AuthResponse,
 )
 from app.services import auth
 
 router = APIRouter(prefix="/auth")
 
 
-@router.post("/signup", response_model=AuthResponse)
+@router.post("/signup", response_model=UserResponse)
 def signup(
     payload: SignupRequest,
     response: Response,
     db: Session = Depends(get_db),
-) -> AuthResponse:
+) -> UserResponse:
     user = auth.create_user_with_password(
         email=payload.email,
         password=payload.password,
@@ -36,18 +35,15 @@ def signup(
     )
     token = auth.create_access_token(str(user.id))
     auth.set_auth_cookie(response, token)
-    return AuthResponse(
-        success=True,
-        user=UserResponse.model_validate(user)
-    )
+    return UserResponse.model_validate(user)
 
 
-@router.post("/login", response_model=AuthResponse)
+@router.post("/login", response_model=UserResponse)
 def login(
     payload: LoginRequest,
     response: Response,
     db: Session = Depends(get_db),
-) -> AuthResponse:
+) -> UserResponse:
     user = auth.authenticate_user(
         email=payload.email,
         password=payload.password,
@@ -60,11 +56,8 @@ def login(
         )
     token = auth.create_access_token(str(user.id))
     auth.set_auth_cookie(response, token)
-    return AuthResponse(
-        success=True,
-        user=UserResponse.model_validate(user)
-    )
-
+    return UserResponse.model_validate(user)
+    
 
 @router.get("/google/login")
 def google_login() -> RedirectResponse:
@@ -134,7 +127,7 @@ async def google_callback(
 
 @router.get("/me", response_model=UserResponse)
 def get_current_user_info(
-    user: Users = Depends(auth.get_current_user),
+    user: User = Depends(auth.get_current_user),
 ) -> UserResponse:
     return UserResponse.model_validate(user)
 
@@ -147,8 +140,8 @@ def logout(response: Response) -> dict[str, bool]:
 
 @router.post("/set_password")
 def set_password(
-    payload: SetPasswordRequest,
-    user: Users = Depends(auth.get_current_user),
+    payload: PasswordRequest,
+    user: User = Depends(auth.get_current_user),
     db: Session = Depends(get_db),
 ) -> dict[str, bool]:
     setattr(user, "hashed_password", auth.hash_password(payload.password))

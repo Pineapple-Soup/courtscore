@@ -1,44 +1,70 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { usePathname } from "next/navigation";
-import { useAnnotationStore } from "@/store/useAnnotationStore";
+import { useAssignmentStore } from "@/store/useAssignmentStore";
 import VideoPlayer from "@/components/VideoPlayer";
 
 const VideoHandler = () => {
-  const pathname = usePathname();
-  const videoId = useAnnotationStore((state) => state.videoId);
-  const setVideoId = useAnnotationStore((state) => state.setVideoId);
-  const [videoSrc, setVideoSrc] = useState<string | null>(null);
+  const currentAssignmentId = useAssignmentStore((s) => s.currentAssignmentId);
+  const [videoSrc, setVideoSrc] = useState<string>("");
 
   useEffect(() => {
-    const match = pathname?.match(/\/annotate\/([a-f0-9\-]{36})/);
-    if (match && match[1]) {
-      setVideoId(match[1]);
-    }
-  }, [pathname, setVideoId]);
-
-  const getSignedURL = async (id: string) => {
-    try {
-      const res = await fetch(`http://localhost:8000/api/v1/videos/${id}/url`);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json();
-      if (data) {
-        setVideoSrc(data["signed_url"]);
+    if (!currentAssignmentId) return;
+    const fetchAssignmentContext = async () => {
+      try {
+        const res = await fetch(
+          `http://localhost:8000/api/v1/assignments/${currentAssignmentId}/context`,
+          { credentials: "include" },
+        );
+        if (!res.ok) {
+          throw new Error("Failed to fetch assignment context");
+        }
+        const data = await res.json();
+        return data;
+      } catch (err) {
+        console.error(err);
+        // Handle error (e.g. show notification)
       }
-    } catch {
-      console.log("error");
-    }
-  };
+    };
 
-  useEffect(() => {
-    if (videoId) {
-      getSignedURL(videoId);
-    }
-  }, [videoId]);
+    const getSignedURL = async (id: string) => {
+      try {
+        const res = await fetch(
+          `http://localhost:8000/api/v1/videos/${id}/url`,
+          {
+            credentials: "include",
+          },
+        );
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        if (data.signedUrl) {
+          return data.signedUrl;
+        } else {
+          throw new Error("No signed URL returned");
+        }
+      } catch (err) {
+        console.error("Error fetching signed URL:", err);
+        // Handle error (e.g. show notification)
+      }
+    };
+
+    fetchAssignmentContext().then((context) => {
+      if (context?.video_id) {
+        getSignedURL(context.video_id).then((url) => {
+          if (url) {
+            setVideoSrc(url);
+          } else {
+            console.error("Failed to get signed URL for video");
+          }
+        });
+      } else {
+        console.error("No video ID found in assignment context");
+      }
+    });
+  }, [currentAssignmentId]);
 
   return (
-    <div className='flex items-center justify-center aspect-video border-4 border-neutral-400 rounded-2xl'>
+    <div className='flex items-center justify-center aspect-video border rounded-lg bg-background shadow-main overflow-hidden'>
       {videoSrc ? <VideoPlayer src={videoSrc} /> : <div>Loading Video...</div>}
     </div>
   );

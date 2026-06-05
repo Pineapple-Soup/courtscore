@@ -4,6 +4,7 @@ import uuid
 from typing import Optional
 
 from app.core.config import settings
+from app.core.exceptions import GCSError
 from google.cloud import storage
 from google.oauth2 import service_account
 
@@ -27,7 +28,13 @@ class GCSService:
         video_id = str(uuid.uuid4())
         blob_name = f"videos/{video_id}.mp4"
         blob = bucket.blob(blob_name)
-        blob.upload_from_filename(video_path)
+        blob.chunk_size = 5 * 1024 * 1024  # 5 MB
+        
+        try:
+            blob.upload_from_filename(video_path)
+        except Exception as e:
+            raise GCSError(f"Failed to upload video to GCS: {str(e)}")
+
         return video_id, blob_name
 
     def generate_signed_url(self, blob_name: str) -> str:

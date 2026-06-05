@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useAnnotationStore } from "@/store/useAnnotationStore";
-import { Behavior, BehaviorStatus } from "@/types/behavior";
+import { BehaviorStatus } from "@/types/behavior";
 import { Segment } from "@/types/segment";
 import Modal from "@/components/Modal";
 
@@ -51,8 +51,8 @@ const SegmentModal = ({ segment, onClose }: SegmentModalProps) => {
     ) {
       alert(
         `Existing ${
-          Behavior[segment.behavior]
-        } segment already active. Please specify an end time`
+          segment.behavior.name
+        } segment already active. Please specify an end time`,
       );
       return;
     }
@@ -81,72 +81,99 @@ const SegmentModal = ({ segment, onClose }: SegmentModalProps) => {
   };
 
   return (
-    <Modal title='Segment Details' onClose={onClose}>
-      <h2 className='flex w-full items-center justify-center my-2 font-bold text-xl'>
-        {Behavior[segment.behavior]}
-      </h2>
-      <div className='flex flex-col gap-4'>
-        <div>
-          <label htmlFor='startTime'>Start Time:</label>
-          <input
-            id='startTime'
-            type='number'
-            required
-            value={startTime}
-            min={0}
-            max={duration}
-            onChange={(e) => {
-              const value = e.target.value;
-              const num = Number(value);
-              setStartTime(Number(num.toFixed(2)));
-            }}
-            className='w-full p-2 border border-gray-300 rounded-md shadow-sm'
-            disabled={isPlaying}
-          />
+    <Modal title='Edit Segment' onClose={onClose}>
+      <div className='space-y-6'>
+        <div className='text-center'>
+          <h2 className='text-lg font-bold uppercase tracking-widest text-foreground'>
+            {segment.behavior.name}
+          </h2>
         </div>
-        <div>
-          <label htmlFor='endTime'>End Time:</label>
-          <input
-            id='endTime'
-            type='number'
-            value={endTime === null ? "" : endTime}
-            required
-            min={0}
-            max={duration}
-            placeholder='In-Progress'
-            onChange={(e) => {
-              const value = e.target.value;
-              setEndTime(
-                value === "" ? null : Number(Number(value).toFixed(2))
-              );
-            }}
-            className='w-full p-2 border border-gray-300 rounded-md shadow-sm'
-            disabled={isPlaying}
-          />
+
+        <div className='grid grid-cols-1 md:grid-cols-2 gap-4'>
+          <div className='space-y-2'>
+            <label
+              htmlFor='startTime'
+              className='text-xs font-bold uppercase text-muted-foreground'>
+              Start Time (s)
+            </label>
+            <input
+              id='startTime'
+              type='number'
+              required
+              value={startTime}
+              min={0}
+              max={duration}
+              onChange={(e) => {
+                const value = e.target.value;
+                const num = Number(value);
+                setStartTime(Number(num.toFixed(2)));
+              }}
+              className='w-full px-3 py-2 bg-background border border-input rounded-md font-mono text-sm focus:outline-none focus:ring-2 focus:ring-ring transition-all'
+              disabled={isPlaying}
+            />
+          </div>
+          <div className='space-y-2'>
+            <label
+              htmlFor='endTime'
+              className='text-xs font-bold uppercase text-muted-foreground'>
+              End Time (s)
+            </label>
+            <input
+              id='endTime'
+              type='number'
+              value={endTime === null ? "" : endTime}
+              required
+              min={0}
+              max={duration}
+              placeholder='In-Progress'
+              onChange={(e) => {
+                const value = e.target.value;
+                setEndTime(
+                  value === "" ? null : Number(Number(value).toFixed(2)),
+                );
+              }}
+              className='w-full px-3 py-2 bg-background border border-input rounded-md font-mono text-sm focus:outline-none focus:ring-2 focus:ring-ring transition-all'
+              disabled={isPlaying}
+            />
+          </div>
         </div>
-        <div>
-          <label htmlFor='notes'>Notes:</label>
+
+        <div className='space-y-2'>
+          <label
+            htmlFor='notes'
+            className='text-xs font-bold uppercase text-muted-foreground'>
+            Notes
+          </label>
           <textarea
             id='notes'
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
-            className='w-full p-2 border border-gray-300 rounded-md shadow-sm'
+            className='w-full p-2 border border-input rounded-md shadow-sm bg-background min-h-[80px] text-sm focus:outline-none focus:ring-2 focus:ring-ring transition-all'
             disabled={isPlaying}
+            placeholder='Add optional notes...'
           />
         </div>
-        <div className='flex justify-between'>
+
+        <div className='flex justify-between items-center pt-4 border-t border-border'>
           <button
-            className='px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600 cursor-pointer'
+            className='px-5 py-2 bg-destructive/10 border border-destructive/50 text-destructive text-xs font-bold uppercase tracking-widest rounded hover:bg-destructive hover:text-destructive-foreground transition-all disabled:opacity-50 disabled:cursor-not-allowed'
             onClick={handleDelete}
             disabled={isPlaying}>
             Delete
           </button>
-          <button
-            className='px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600 cursor-pointer'
-            onClick={handleSave}
-            disabled={isPlaying}>
-            Save
-          </button>
+          <div className='flex gap-2'>
+            <button
+              className='px-3 py-2 text-muted-foreground hover:text-foreground text-xs font-bold uppercase tracking-widest transition-colors'
+              onClick={onClose}>
+              Cancel
+            </button>
+            <button
+              className='px-5 py-2 bg-primary text-primary-foreground text-xs font-bold uppercase tracking-widest rounded shadow-main hover:brightness-110 active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed'
+              onClick={handleSave}
+              disabled={isPlaying}>
+              Save Changes
+            </button>
+          </div>
         </div>
       </div>
     </Modal>

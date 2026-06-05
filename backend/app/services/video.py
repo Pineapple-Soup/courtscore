@@ -1,63 +1,115 @@
+from datetime import datetime
 import os
 import shutil
-from typing import BinaryIO, Sequence
 
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
+from typing import BinaryIO, Dict, List, Optional, cast
 
 from app.core.config import settings
-from app.core.exceptions import VideoNotFoundError
+from app.core.context import ServiceContext
+from app.core.exceptions import ForbiddenError, ProcessingError, VideoNotFoundError
 from app.database.models import Video
-from app.database.schemas import VideoStatusEnum
 from app.services.gcs import GCSService
 from app.services.preprocess import PreprocessService
 
 
 class VideoService:
-    def __init__(self, db: Session, preprocess_service: PreprocessService, gcs_service: GCSService):
+    def __init__(self, db: Session, ctx: ServiceContext, preprocess_service: PreprocessService, gcs_service: GCSService):
         self.db = db
+        self.ctx = ctx
         self.gcs_service = gcs_service or GCSService()
         self.preprocess_service = preprocess_service
-
-    def list_all(self) -> Sequence[Video]:
-        return self.db.query(Video).all()
-
-    def get_by_id(self, video_id: str) -> Video:
-        video = self.db.query(Video).filter(Video.id == video_id).first()
-        if not video:
-            raise VideoNotFoundError(video_id)
-        return video
-
-    def update_status(self, video_id: str, status: VideoStatusEnum) -> Video:
-        video = self.get_by_id(video_id)
-        setattr(video, "status", status.value)
+    
+    def _upload_single_video(self, file_path: str, label: Optional[str], description: Optional[str]) -> Video:
+        id, gcp_path = self.gcs_service.upload_video(file_path)
+        new_video_label = label or os.path.splitext(os.path.basename(file_path))[0]
+        new_video = Video(id=id, src=gcp_path, label=new_video_label, description=description)
+        self.db.add(new_video)
         self.db.commit()
-        self.db.refresh(video)
-        return video
+        self.db.refresh(new_video)
+        return new_video
 
-    def get_signed_url(self, video_id: str) -> str:
-        video = self.get_by_id(video_id)
-        return self.gcs_service.generate_signed_url(str(video.src))
-
-    def _upload_multiple_videos(self, file_path_list: list[str]) -> list[Video]:
+    def _upload_multiple_videos(self, file_path_list: list[str], label: Optional[str], description: Optional[str]) -> list[Video]:
         uploaded_videos: list[Video] = []
-        for file_path in file_path_list:
-            id, gcp_path = self.gcs_service.upload_video(file_path)
-            new_video = Video(id=id, src=gcp_path, label=os.path.splitext(os.path.basename(file_path))[0])
-            self.db.add(new_video)
+        try:
+            for idx, file_path in enumerate(file_path_list):
+                id, gcp_path = self.gcs_service.upload_video(file_path)
+                new_video_label = f"{label} {idx+1}" if label else os.path.splitext(os.path.basename(file_path))[0]
+                new_video = Video(id=id, src=gcp_path, label=new_video_label, description=description)
+                self.db.add(new_video)
+                uploaded_videos.append(new_video)
             self.db.commit()
-            self.db.refresh(new_video)
-            uploaded_videos.append(new_video)
-        
-        return uploaded_videos
+            for v in uploaded_videos:
+                self.db.refresh(v)
+            return uploaded_videos
+        except Exception:
+            self.db.rollback()
+            raise ProcessingError("Failed to upload videos. Transaction rolled back.")
 
     def _cleanup_files(self, file_path_list: list[str]) -> None:
         for file_path in file_path_list:
             if os.path.exists(file_path):
                 os.remove(file_path)
+
+    def _require_admin(self) -> None:
+        """Verify user is an admin."""
+        if not self.ctx.is_admin:
+            raise ForbiddenError("Admin privileges required to access this resource")
+
+    def list_all(self) -> List[Dict[str, str | int | datetime]]:
+        self._require_admin()
+        videos = (self.db.query(Video).options(selectinload(Video.project_links))).all()
+        video_list = []
+        for video in videos:
+            project_links = getattr(video, "project_links", [])
+            video_list.append({
+                "id": cast(str, video.id),
+                "src": cast(str, video.src),
+                "label": cast(str, video.label),
+                "description": cast(str, video.description),
+                "linkCount": len(project_links),
+                "createdAt": cast(datetime, (video.created_at))
+            })
+        return video_list
+
+    def get(self, video_id: str) -> Video:
+        video = self.db.query(Video).filter(Video.id == video_id).first()
+        if not video:
+            raise VideoNotFoundError(video_id)
+        return video
+
+    def delete(self, video_id: str) -> None:
+        self._require_admin()
+
+        video = self.db.query(Video).options(selectinload(Video.project_links)).filter(Video.id == video_id).first()
+        if not video:
+            raise VideoNotFoundError(video_id)
+        
+        if getattr(video, "project_links", []):
+            raise ForbiddenError("Cannot delete video that is linked to a project. Unlink from all projects before deletion.")
+        self.gcs_service.delete_video(str(video.src))
+        self.db.delete(video)
+        self.db.commit()
+
+    def get_signed_url(self, video_id: str) -> str:
+        video = self.db.query(Video).filter(Video.id == video_id).first()
+        if not video:
+            raise VideoNotFoundError(video_id)
+        return self.gcs_service.generate_signed_url(str(video.src))
     
-    def upload_video(self, file_path: str) -> list[Video]:
-        file_path_list: list[str] = self.preprocess_service.process_video(file_path, settings.OUTPUT_PATH)
-        created_videos: list[Video] = self._upload_multiple_videos(file_path_list)
+    def upload_video(self, file_path: str, label: Optional[str], description: Optional[str] = None) -> list[Video]:
+        self._require_admin()
+
+        created_video = self._upload_single_video(file_path, label, description)
+        self._cleanup_files([file_path])
+
+        return [created_video]
+    
+    def upload_video_with_preprocess(self, file_path: str, label: Optional[str], description: Optional[str] = None) -> list[Video]:
+        self._require_admin()
+
+        file_path_list = self.preprocess_service.process_video(file_path, settings.OUTPUT_PATH)
+        created_videos: list[Video] = self._upload_multiple_videos(file_path_list, label, description)
         self._cleanup_files(file_path_list + [file_path])
 
         return created_videos

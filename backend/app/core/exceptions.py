@@ -17,7 +17,7 @@ class AnnotationNotFoundError(Exception):
 
 
 class ProcessingError(Exception):
-    """Raised when video processing fails."""
+    """Raised when processing fails."""
     def __init__(self, message: str):
         self.message = message
         super().__init__(message)
@@ -26,6 +26,30 @@ class ProcessingError(Exception):
 class GCSError(Exception):
     """Raised when GCS operations fail."""
     def __init__(self, message: str):
+        self.message = message
+        super().__init__(message)
+
+class NotFoundError(Exception):
+    """Raised when a resource is not found."""
+    def __init__(self, message: str = "Resource not found"):
+        self.message = message
+        super().__init__(message)
+
+class ForbiddenError(Exception):
+    """Raised when user lacks permission for an action."""
+    def __init__(self, message: str = "Permission denied"):
+        self.message = message
+        super().__init__(message)
+
+class ConflictError(Exception):
+    """Raised when a resource already exists."""
+    def __init__(self, message: str = "Resource already exists"):
+        self.message = message
+        super().__init__(message)
+
+class BadRequestError(Exception):
+    """Raised when request is invalid."""
+    def __init__(self, message: str = "Bad request"):
         self.message = message
         super().__init__(message)
 
@@ -45,3 +69,19 @@ async def processing_error_handler(request: Request, exc: Exception) -> JSONResp
 
 async def gcs_error_handler(request: Request, exc: Exception) -> JSONResponse:
     return JSONResponse(status_code=500, content={"detail": f"Storage error: {exc}"})
+
+
+async def not_found_handler(request: Request, exc: Exception) -> JSONResponse:
+    return JSONResponse(status_code=404, content={"detail": str(exc)})
+
+
+async def forbidden_handler(request: Request, exc: Exception) -> JSONResponse:
+    return JSONResponse(status_code=403, content={"detail": str(exc)})
+
+
+async def conflict_handler(request: Request, exc: Exception) -> JSONResponse:
+    return JSONResponse(status_code=409, content={"detail": str(exc)})
+
+
+async def bad_request_handler(request: Request, exc: Exception) -> JSONResponse:
+    return JSONResponse(status_code=400, content={"detail": str(exc)})
