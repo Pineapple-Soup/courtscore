@@ -1,4 +1,5 @@
 "use client";
+
 import { useEffect, useState } from "react";
 import { Plus, X, Loader2 } from "lucide-react";
 import { useProjectStore } from "@/store/useProjectStore";
@@ -6,7 +7,7 @@ import { useVideoStore } from "@/store/useVideoStore";
 import { Video } from "@/types/video";
 import SystemError from "@/components/SystemError";
 
-export default function VideoLinker() {
+export default function VideoLinker({ locked }: { locked: boolean }) {
   const [query, setQuery] = useState("");
   const [videos, setVideos] = useState<Video[]>([]);
   const [loading, setLoading] = useState(false);
@@ -53,6 +54,10 @@ export default function VideoLinker() {
   }, [query, searchVideos, currentProject]);
 
   const handleLink = async (video: Video) => {
+    if (locked) {
+      alert("Project is locked. Cannot link videos.");
+      return;
+    }
     try {
       setVideos((prev) => prev.filter((v) => v.id !== video.id));
       await linkProjectVideo(video.id);
@@ -61,18 +66,22 @@ export default function VideoLinker() {
       setVideos([]);
     } catch (err) {
       console.error(err);
-      setError("Failed to link video");
+      setError(err instanceof Error ? err.message : "Failed to link video");
     }
   };
 
   const handleUnlink = async (video: Video) => {
+    if (locked) {
+      alert("Project is locked. Cannot unlink videos.");
+      return;
+    }
     try {
       setVideos((prev) => [...prev, video]);
       await unlinkProjectVideo(video.id);
       await fetchProject();
     } catch (err) {
       console.error(err);
-      setError("Failed to unlink video");
+      setError(err instanceof Error ? err.message : "Failed to unlink video");
     }
   };
 
@@ -129,6 +138,9 @@ export default function VideoLinker() {
                   <p className='text-sm text-muted-foreground'>
                     {projectVideo.video?.description ??
                       "No description provided."}
+                  </p>
+                  <p className='text-sm text-muted-foreground mt-1 font-mono'>
+                    {projectVideo.video?.src}
                   </p>
                 </div>
                 <button

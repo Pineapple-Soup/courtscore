@@ -6,7 +6,7 @@ import { useUserStore } from "@/store/useUserStore";
 import { User } from "@/types/user";
 import SystemError from "@/components/SystemError";
 
-const MemberLinker = () => {
+const MemberLinker = ({ locked }: { locked: boolean }) => {
   const [query, setQuery] = useState("");
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(false);
@@ -53,6 +53,10 @@ const MemberLinker = () => {
   }, [query, searchUsers, currentProject]);
 
   const handleAdd = async (user: User) => {
+    if (locked) {
+      alert("Project is locked. Cannot add members.");
+      return;
+    }
     try {
       setUsers((prev) => prev.filter((u) => u.id !== user.id));
       await addProjectMember(user.id);
@@ -60,18 +64,22 @@ const MemberLinker = () => {
       setQuery("");
     } catch (err) {
       console.error(err);
-      setError("Failed to add member");
+      setError(err instanceof Error ? err.message : "Failed to add member");
     }
   };
 
   const handleRemove = async (user: User) => {
+    if (locked) {
+      alert("Project is locked. Cannot remove members.");
+      return;
+    }
     try {
       setUsers((prev) => [...prev, user]);
       await removeProjectMember(user.id);
       await fetchProject();
     } catch (err) {
       console.error(err);
-      setError("Failed to remove member");
+      setError(err instanceof Error ? err.message : "Failed to remove member");
     }
   };
 
