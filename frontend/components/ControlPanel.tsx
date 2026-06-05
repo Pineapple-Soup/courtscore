@@ -2,47 +2,55 @@
 
 import { useEffect, useState } from "react";
 import { useAnnotationStore } from "@/store/useAnnotationStore";
-import { Behavior } from "@/types/behavior";
-import { Video, VideoStatus } from "@/types/video";
+import { useAssignmentStore } from "@/store/useAssignmentStore";
+import { VideoStatus } from "@/types/video";
 import ResetModal from "@/components/ResetModal";
+import Modal from "@/components/Modal";
+import { Assignment } from "@/types/assignment";
 
 const ControlPanel = () => {
+  const currentAssignmentId = useAssignmentStore((s) => s.currentAssignmentId);
+
   const segments = useAnnotationStore((s) => s.segments);
-  const videoId = useAnnotationStore((s) => s.videoId);
+  const submitted = useAnnotationStore((s) => s.submitted);
   const setSegments = useAnnotationStore((s) => s.setSegments);
-  const getActiveBehaviors = useAnnotationStore((s) => s.getActiveBehaviors);
+  const setSubmitted = useAnnotationStore((s) => s.setSubmitted);
   const clearInProgress = useAnnotationStore((s) => s.clearInProgress);
-  const [videoInfo, setVideoInfo] = useState<Video | null>(null);
+
+  const [projectVideoId, setProjectVideoId] = useState<string>("");
   const [isResetModalOpen, setIsResetModalOpen] = useState(false);
+  const [isSubmitModalOpen, setIsSubmitModalOpen] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
-    const fetchVideoInfo = async () => {
+    if (!currentAssignmentId) return;
+    const fetchAssignment = async () => {
       try {
         const res = await fetch(
-          `http://localhost:8000/api/v1/videos/${videoId}`
+          `http://localhost:8000/api/v1/assignments/${currentAssignmentId}`,
+          { credentials: "include" },
         );
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const data = await res.json();
-        if (data) {
-          setVideoInfo(data);
-          return;
+        if (!res.ok) {
+          throw new Error("Failed to fetch assignment context");
         }
+        const data: Assignment = await res.json();
+        return data;
       } catch (err) {
-        console.error("Failed to fetch video", err);
+        console.error(err);
       }
-      setVideoInfo(null);
     };
 
     const fetchAnnotationInfo = async () => {
       try {
         const res = await fetch(
-          `http://localhost:8000/api/v1/annotations/${videoId}`,
-          { credentials: "include" }
+          `http://localhost:8000/api/v1/annotations/${currentAssignmentId}`,
+          { credentials: "include" },
         );
         if (res.ok) {
           const data = await res.json();
           if (data) {
             setSegments(data.segments);
+            setSubmitted(data.submitted, data.submitted_at);
           }
         }
       } catch (err) {
@@ -50,13 +58,12 @@ const ControlPanel = () => {
       }
     };
 
-    if (videoId) {
-      fetchVideoInfo();
+    fetchAssignment().then((assignment) => {
+      setProjectVideoId(assignment?.projectVideoId || "");
+      console.log("Fetched assignment:", assignment);
       fetchAnnotationInfo();
-    } else {
-      setVideoInfo(null);
-    }
-  }, [videoId, setSegments]);
+    });
+  }, [currentAssignmentId, projectVideoId, setSegments, setSubmitted]);
 
   const handleReset = () => {
     clearInProgress();
@@ -65,62 +72,52 @@ const ControlPanel = () => {
 
   const handleExport = async () => {
     // TODO: Migrate to API endpoint
-    const behaviorIds = Object.values(Behavior).filter(
-      (value) => typeof value === "number"
-    );
-    const behaviorLabels = behaviorIds.map((id) => Behavior[id]);
-
-    const minTime = 0;
-    const maxTime = 600;
-
-    const timePoints = [];
-    for (let t = minTime; t <= maxTime; t++) {
-      timePoints.push(t);
-    }
-
-    const formatTime = (seconds: number): string => {
-      const minutes = Math.floor(seconds / 60);
-      const remainingSeconds = seconds % 60;
-      return `${minutes}:${remainingSeconds.toString().padStart(2, "0")}`;
-    };
-
-    const csvRows = [
-      ["time", ...behaviorLabels],
-      ...timePoints.map((time) => {
-        const activeBehaviors = getActiveBehaviors(time);
-        return [
-          formatTime(time),
-          ...behaviorIds.map((id) => {
-            return activeBehaviors.includes(id) ? id : "";
-          }),
-        ];
-      }),
-    ];
-
-    const csvContent = csvRows.map((row) => row.join(",")).join("\n");
-    const blob = new Blob([csvContent], { type: "text/csv" });
-    const url = URL.createObjectURL(blob);
-
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = videoInfo ? `${videoInfo.label}.csv` : `${videoId}.csv`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    // const behaviorLabels = behaviors.map((behavior) => behavior.name);
+    // const minTime = 0;
+    // const maxTime = 600;
+    // const timePoints = [];
+    // for (let t = minTime; t <= maxTime; t++) {
+    //   timePoints.push(t);
+    // }
+    // const formatTime = (seconds: number): string => {
+    //   const minutes = Math.floor(seconds / 60);
+    //   const remainingSeconds = seconds % 60;
+    //   return `${minutes}:${remainingSeconds.toString().padStart(2, "0")}`;
+    // };
+    // const csvRows = [
+    //   ["time", ...behaviorLabels],
+    //   ...timePoints.map((time) => {
+    //     const activeBehaviors = getActiveBehaviors(time);
+    //     return [
+    //       formatTime(time),
+    //       ...behaviorLabels.map((label) => {
+    //         return activeBehaviors.some((behavior) => behavior.name === label)
+    //           ? label
+    //           : "";
+    //       }),
+    //     ];
+    //   }),
+    // ];
+    // const csvContent = csvRows.map((row) => row.join(",")).join("\n");
+    // const blob = new Blob([csvContent], { type: "text/csv" });
+    // const url = URL.createObjectURL(blob);
+    // const a = document.createElement("a");
+    // a.href = url;
+    // a.download = videoInfo ? `${videoInfo.label}.csv` : `${videoId}.csv`;
+    // document.body.appendChild(a);
+    // a.click();
+    // document.body.removeChild(a);
+    // URL.revokeObjectURL(url);
   };
 
   const handleSave = async () => {
-    const annotationData = {
-      video_id: videoId,
-      segments: segments,
-    };
+    if (submitted) return;
 
     const checkAnnotation = async () => {
       try {
         const res = await fetch(
-          `http://localhost:8000/api/v1/annotations/${videoId}`,
-          { credentials: "include" }
+          `http://localhost:8000/api/v1/annotations/${currentAssignmentId}`,
+          { credentials: "include" },
         );
         if (res.ok) {
           return await res.json();
@@ -137,12 +134,17 @@ const ControlPanel = () => {
 
     const createAnnotation = async () => {
       try {
-        const res = await fetch(`http://localhost:8000/api/v1/annotations`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(annotationData),
-          credentials: "include",
-        });
+        const res = await fetch(
+          `http://localhost:8000/api/v1/annotations/${currentAssignmentId}`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ segments: segments }),
+            credentials: "include",
+          },
+        );
         if (res.ok) {
           const data = await res.json();
           setSegments(data.segments);
@@ -158,13 +160,15 @@ const ControlPanel = () => {
     const updateAnnotation = async () => {
       try {
         const res = await fetch(
-          `http://localhost:8000/api/v1/annotations/${videoId}`,
+          `http://localhost:8000/api/v1/annotations/${currentAssignmentId}`,
           {
             method: "PUT",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(annotationData),
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ segments: segments }),
             credentials: "include",
-          }
+          },
         );
         if (res.ok) {
           const data = await res.json();
@@ -178,33 +182,32 @@ const ControlPanel = () => {
       }
     };
 
-    const updateVideoStatus = async () => {
+    const updateAssignmentStatus = async () => {
       try {
-        if (!videoInfo) return;
+        if (!currentAssignmentId) return;
         const status: VideoStatus =
           !segments || segments.length === 0
             ? VideoStatus.NOT_STARTED
             : VideoStatus.IN_PROGRESS;
 
         const res = await fetch(
-          `http://localhost:8000/api/v1/videos/${videoId}`,
+          `http://localhost:8000/api/v1/assignments/${currentAssignmentId}`,
           {
             method: "PUT",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ status: status }),
             credentials: "include",
-          }
+          },
         );
 
         if (res.ok) {
           const data = await res.json();
-          setVideoInfo(data);
           console.log(data);
         } else {
-          throw new Error("Failed to update video status");
+          throw new Error("Failed to update assignment status");
         }
       } catch (err) {
-        console.error("Error updating video status", err);
+        console.error("Error updating assignment status", err);
         throw err;
       }
     };
@@ -216,42 +219,111 @@ const ControlPanel = () => {
       } else {
         await createAnnotation();
       }
-      await updateVideoStatus();
+      await updateAssignmentStatus();
     } catch (err) {
       console.error("Failed to save annotation", err);
     }
   };
 
-  // TODO: function for handling submission logic
+  const handleSubmit = async () => {
+    if (submitted) return;
+
+    const sumbitAnnotation = async () => {
+      try {
+        const res = await fetch(
+          `http://localhost:8000/api/v1/annotations/${currentAssignmentId}/submit`,
+          {
+            method: "POST",
+            credentials: "include",
+          },
+        );
+        if (res.ok) {
+          const data = await res.json();
+          setSubmitted(true, data.submitted_at);
+        } else {
+          const error = await res.json();
+          throw new Error(error.detail || "Failed to submit annotation");
+        }
+      } catch (err) {
+        console.error("Error submitting annotation", err);
+        throw err;
+      }
+    };
+
+    const updateAssignmentStatus = async () => {
+      try {
+        if (!currentAssignmentId) return;
+        const res = await fetch(
+          `http://localhost:8000/api/v1/assignments/${currentAssignmentId}`,
+          {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ status: VideoStatus.COMPLETED }),
+            credentials: "include",
+          },
+        );
+
+        if (res.ok) {
+          const data = await res.json();
+          console.log(data);
+        } else {
+          throw new Error("Failed to update assignment status");
+        }
+      } catch (err) {
+        console.error("Error updating assignment status", err);
+        throw err;
+      }
+    };
+
+    setIsSubmitting(true);
+    try {
+      await handleSave();
+      await sumbitAnnotation();
+      await updateAssignmentStatus();
+      setIsSubmitModalOpen(false);
+    } catch (err) {
+      alert(
+        err instanceof Error
+          ? `Failed to submit annotation: ${err.message}`
+          : "Failed to submit annotation",
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   return (
-    <div className='grid grid-rows-2 grid-cols-2 gap-4'>
+    <div className='grid grid-cols-2 gap-2'>
       <button
-        className='rounded-lg bg-neutral-200 hover:bg-neutral-300 text-neutral-800 font-semibold cursor-pointer'
+        className={`px-5 py-2 border-2 border-border bg-transparent text-foreground text-xs font-bold uppercase tracking-widest rounded hover:bg-muted transition-all disabled:bg-muted/50 disabled:text-muted-foreground disabled:cursor-not-allowed`}
         aria-label='Reset'
         type='button'
-        onClick={() => setIsResetModalOpen(true)}>
+        disabled={submitted}
+        onClick={() => !submitted && setIsResetModalOpen(true)}>
         Reset
       </button>
       <button
-        className='rounded-lg bg-neutral-500 hover:bg-neutral-600 text-white font-semibold cursor-pointer'
+        className='px-5 py-2 bg-secondary text-secondary-foreground text-xs font-bold uppercase tracking-widest rounded shadow-sm hover:opacity-90 transition-all'
         aria-label='Export'
         type='button'
         onClick={() => handleExport()}>
         Export
       </button>
       <button
-        className='rounded-lg bg-green-500 hover:bg-green-600 text-white font-semibold cursor-pointer'
+        className={`px-5 py-2 bg-secondary text-secondary-foreground text-xs font-bold uppercase tracking-widest rounded shadow-sm hover:opacity-90 transition-all disabled:bg-muted/50 disabled:text-muted-foreground disabled:cursor-not-allowed`}
         aria-label='Save'
         type='button'
-        onClick={() => handleSave()}>
+        disabled={submitted}
+        onClick={() => !submitted && handleSave()}>
         Save
       </button>
       <button
-        className='rounded-lg bg-blue-500 hover:bg-blue-600 text-white font-semibold cursor-pointer'
+        className={`px-5 py-2 bg-primary text-primary-foreground text-xs font-bold uppercase tracking-widest rounded shadow-main hover:brightness-110 active:scale-95 transition-all disabled:bg-muted/50 disabled:text-muted-foreground disabled:cursor-not-allowed`}
         aria-label='Submit'
-        type='button'>
-        Submit
+        type='button'
+        disabled={submitted}
+        onClick={() => !submitted && setIsSubmitModalOpen(true)}>
+        {submitted ? "Submitted" : "Submit"}
       </button>
 
       {isResetModalOpen && (
@@ -259,6 +331,39 @@ const ControlPanel = () => {
           onConfirm={handleReset}
           onCancel={() => setIsResetModalOpen(false)}
         />
+      )}
+
+      {isSubmitModalOpen && (
+        <Modal
+          title='Submit Annotation'
+          onClose={() => setIsSubmitModalOpen(false)}>
+          <div className='space-y-4'>
+            <p className='text-neutral-600'>
+              Are you sure you want to submit this annotation?
+              <strong className='text-red-600'>
+                {" "}
+                This action cannot be undone.
+              </strong>
+            </p>
+            <p className='text-sm text-neutral-500'>
+              Once submitted, you will not be able to edit this annotation.
+            </p>
+            <div className='flex justify-end gap-3 pt-4'>
+              <button
+                className='px-4 py-2 rounded-lg bg-neutral-200 hover:bg-neutral-300 text-neutral-800 font-semibold'
+                onClick={() => setIsSubmitModalOpen(false)}
+                disabled={isSubmitting}>
+                Cancel
+              </button>
+              <button
+                className='px-4 py-2 rounded-lg bg-blue-500 hover:bg-blue-600 text-white font-semibold disabled:bg-blue-300'
+                onClick={handleSubmit}
+                disabled={isSubmitting}>
+                {isSubmitting ? "Submitting..." : "Submit"}
+              </button>
+            </div>
+          </div>
+        </Modal>
       )}
     </div>
   );
