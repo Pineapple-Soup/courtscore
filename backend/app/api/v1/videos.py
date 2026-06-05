@@ -45,7 +45,6 @@ def list_videos(
 @router.get("/{video_id}", response_model=VideoResponse)
 def get_video(
     video_id: str,
-    _: User = Depends(require_role("admin")),
     video_service: VideoService = Depends(get_video_service),
 ) -> VideoResponse:
     video = video_service.get(video_id)

@@ -1,8 +1,9 @@
+from datetime import datetime
 import os
 import shutil
 
-from sqlalchemy.orm import Session
-from typing import BinaryIO, Optional, Sequence
+from sqlalchemy.orm import Session, selectinload
+from typing import BinaryIO, Dict, List, Optional, cast
 
 from app.core.config import settings
 from app.core.context import ServiceContext
@@ -18,6 +19,15 @@ class VideoService:
         self.ctx = ctx
         self.gcs_service = gcs_service or GCSService()
         self.preprocess_service = preprocess_service
+    
+    def _upload_single_video(self, file_path: str, label: Optional[str], description: Optional[str]) -> Video:
+        id, gcp_path = self.gcs_service.upload_video(file_path)
+        new_video_label = label or os.path.splitext(os.path.basename(file_path))[0]
+        new_video = Video(id=id, src=gcp_path, label=new_video_label, description=description)
+        self.db.add(new_video)
+        self.db.commit()
+        self.db.refresh(new_video)
+        return new_video
 
     def _upload_multiple_videos(self, file_path_list: list[str], label: Optional[str], description: Optional[str]) -> list[Video]:
         uploaded_videos: list[Video] = []
@@ -46,14 +56,23 @@ class VideoService:
         if not self.ctx.is_admin:
             raise ForbiddenError("Admin privileges required to access this resource")
 
-    def list_all(self) -> Sequence[Video]:
+    def list_all(self) -> List[Dict[str, str | int | datetime]]:
         self._require_admin()
-        
-        return self.db.query(Video).all()
+        videos = (self.db.query(Video).options(selectinload(Video.project_links))).all()
+        video_list = []
+        for video in videos:
+            project_links = getattr(video, "project_links", [])
+            video_list.append({
+                "id": cast(str, video.id),
+                "src": cast(str, video.src),
+                "label": cast(str, video.label),
+                "description": cast(str, video.description),
+                "linkCount": len(project_links),
+                "createdAt": cast(datetime, (video.created_at))
+            })
+        return video_list
 
     def get(self, video_id: str) -> Video:
-        self._require_admin()
-
         video = self.db.query(Video).filter(Video.id == video_id).first()
         if not video:
             raise VideoNotFoundError(video_id)
@@ -62,19 +81,34 @@ class VideoService:
     def delete(self, video_id: str) -> None:
         self._require_admin()
 
-        video = self.get(video_id)
+        video = self.db.query(Video).options(selectinload(Video.project_links)).filter(Video.id == video_id).first()
+        if not video:
+            raise VideoNotFoundError(video_id)
+        
+        if getattr(video, "project_links", []):
+            raise ForbiddenError("Cannot delete video that is linked to a project. Unlink from all projects before deletion.")
         self.gcs_service.delete_video(str(video.src))
         self.db.delete(video)
         self.db.commit()
 
     def get_signed_url(self, video_id: str) -> str:
-        video = self.get(video_id)
+        video = self.db.query(Video).filter(Video.id == video_id).first()
+        if not video:
+            raise VideoNotFoundError(video_id)
         return self.gcs_service.generate_signed_url(str(video.src))
     
     def upload_video(self, file_path: str, label: Optional[str], description: Optional[str] = None) -> list[Video]:
         self._require_admin()
 
-        file_path_list: list[str] = self.preprocess_service.process_video(file_path, settings.OUTPUT_PATH)
+        created_video = self._upload_single_video(file_path, label, description)
+        self._cleanup_files([file_path])
+
+        return [created_video]
+    
+    def upload_video_with_preprocess(self, file_path: str, label: Optional[str], description: Optional[str] = None) -> list[Video]:
+        self._require_admin()
+
+        file_path_list = self.preprocess_service.process_video(file_path, settings.OUTPUT_PATH)
         created_videos: list[Video] = self._upload_multiple_videos(file_path_list, label, description)
         self._cleanup_files(file_path_list + [file_path])
 
