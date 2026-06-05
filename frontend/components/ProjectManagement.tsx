@@ -1,9 +1,10 @@
 "use client";
+
 import { useEffect, useMemo, useState } from "react";
-import { ChevronRight, Save } from "lucide-react";
+import { Save } from "lucide-react";
+import { AssignmentSummary } from "@/types/assignment";
 import { Behavior } from "@/types/behavior";
 import { useProjectStore } from "@/store/useProjectStore";
-import Link from "next/link";
 import BehaviorCreator from "@/components/BehaviorManager";
 import MemberLinker from "@/components/MemberLinker";
 import ProjectDetails from "@/components/ProjectDetails";
@@ -17,29 +18,66 @@ const ProjectManagement = () => {
   const loading = useProjectStore((s) => s.loading);
   const error = useProjectStore((s) => s.error);
 
-  const [name, setName] = useState("");
-  const [description, setDescription] = useState("");
-  const [annotatorsPerVideo, setAnnotatorsPerVideo] = useState(1);
-  const [behaviors, setBehaviors] = useState<Behavior[]>([]);
-
-  useEffect(() => {
-    setName(currentProject?.name ?? "");
-    setDescription(currentProject?.description ?? "");
-    setAnnotatorsPerVideo(currentProject?.annotatorsPerVideo ?? 1);
-    setBehaviors(currentProject?.behaviors ?? []);
-  }, [currentProject]);
+  const [name, setName] = useState(currentProject?.name ?? "");
+  const [description, setDescription] = useState(
+    currentProject?.description ?? "",
+  );
+  const [annotatorsPerVideo, setAnnotatorsPerVideo] = useState(
+    currentProject?.annotatorsPerVideo ?? 1,
+  );
+  const [behaviors, setBehaviors] = useState<Behavior[]>(
+    currentProject?.behaviors ?? [],
+  );
+  const [assignments, setAssignments] = useState<AssignmentSummary[]>([]);
 
   useEffect(() => {
     if (currentProject?.id) {
       fetchProject().catch(() => {});
+      const loadAssignments = async () => {
+        try {
+          const res = await fetch(
+            `http://localhost:8000/api/v1/projects/${currentProject.id}/assignments`,
+            {
+              credentials: "include",
+            },
+          );
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          const data = await res.json();
+          setAssignments(data);
+        } catch (err) {
+          console.error("Failed to load assignments:", err);
+        }
+      };
+      loadAssignments();
     }
   }, [currentProject?.id, fetchProject]);
 
   const canSave = useMemo(() => {
-    if (!currentProject) return false;
+    if (!currentProject || loading) return false;
     const trimmedName = name.trim();
-    return trimmedName.length > 0 && annotatorsPerVideo >= 1 && !loading;
-  }, [annotatorsPerVideo, currentProject, loading, name]);
+    const changedName = trimmedName !== currentProject.name;
+    const changedDescription =
+      description.trim() !== currentProject.description;
+    const changedAnnotators =
+      annotatorsPerVideo !== currentProject.annotatorsPerVideo;
+    const changedBehaviors =
+      JSON.stringify(behaviors) !== JSON.stringify(currentProject.behaviors);
+    return (
+      (changedName ||
+        changedDescription ||
+        changedAnnotators ||
+        changedBehaviors) &&
+      trimmedName.length > 0 &&
+      annotatorsPerVideo > 0
+    );
+  }, [
+    annotatorsPerVideo,
+    behaviors,
+    currentProject,
+    description,
+    loading,
+    name,
+  ]);
 
   const handleSave = async () => {
     if (!currentProject || !canSave) return;
@@ -54,38 +92,27 @@ const ProjectManagement = () => {
 
   return (
     <div className='container mx-auto p-4 md:p-6'>
-      <div className='mb-6'>
-        <nav className='flex items-center text-sm text-muted-foreground'>
-          <Link href='/dashboard' className='hover:text-primary'>
-            Projects
-          </Link>
-          <ChevronRight size={18} />
-          <span className='font-semibold text-secondary'>
-            {currentProject?.name ?? "Loading..."}
-          </span>
-        </nav>
-        <h1 className='text-2xl font-bold mt-2'>Project Management</h1>
-      </div>
-
-      <div className='mb-8 rounded-lg border bg-card p-6'>
-        <div className='flex items-center justify-between gap-4 mb-6'>
-          <div>
-            <h2 className='text-xl font-semibold'>Project Details</h2>
-            <p className='text-sm text-muted-foreground'>
-              Update the project metadata and behavior set for this project.
-            </p>
+      <div className='mb-8 rounded-lg border'>
+        <div className='flex items-center justify-between gap-4'>
+          <div className='flex w-full px-4 py-2 border-b bg-muted/30 justify-between items-center'>
+            <div>
+              <h2 className='font-bold uppercase tracking-wider'>Settings</h2>
+              <p className='text-sm text-muted-foreground'>
+                Update the project metadata and behavior set for this project.
+              </p>
+            </div>
+            <button
+              type='button'
+              onClick={handleSave}
+              disabled={!canSave}
+              className='inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-bold text-primary-foreground shadow-main transition-all hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50'>
+              <Save size={14} />
+              Save Changes
+            </button>
           </div>
-          <button
-            type='button'
-            onClick={handleSave}
-            disabled={!canSave}
-            className='inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-bold text-primary-foreground shadow-main transition-all hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50'>
-            <Save size={14} />
-            Save Changes
-          </button>
         </div>
 
-        <div className='grid grid-cols-1 gap-5 lg:grid-cols-2'>
+        <div className='grid grid-cols-1 gap-5 lg:grid-cols-2 p-4'>
           <div>
             <ProjectDetails
               name={name}
@@ -118,9 +145,14 @@ const ProjectManagement = () => {
             <span className='font-bold uppercase tracking-wider'>
               Member Linker
             </span>
+            {assignments.length > 0 ? (
+              <span className='h-2 w-2 rounded-full bg-primary' />
+            ) : (
+              <span className='h-2 w-2 rounded-full bg-secondary' />
+            )}
           </div>
           <div className='p-4'>
-            <MemberLinker />
+            <MemberLinker locked={assignments.length > 0} />
           </div>
         </div>
         <div className='border rounded-xl bg-background shadow-main overflow-hidden'>
@@ -128,9 +160,14 @@ const ProjectManagement = () => {
             <span className='font-bold uppercase tracking-wider'>
               Video Linker
             </span>
+            {assignments.length > 0 ? (
+              <span className='h-2 w-2 rounded-full bg-primary' />
+            ) : (
+              <span className='h-2 w-2 rounded-full bg-secondary' />
+            )}
           </div>
           <div className='p-4'>
-            <VideoLinker />
+            <VideoLinker locked={assignments.length > 0} />
           </div>
         </div>
       </div>
