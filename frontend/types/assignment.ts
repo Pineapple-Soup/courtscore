@@ -1,7 +1,16 @@
 export interface Assignment {
   id: string;
-  project_video_id: string;
-  user_id: string;
+  projectVideoId: string;
+  userId: string;
   status: string;
-  created_at?: string;
+  createdAt?: string;
+}
+
+export interface AssignmentSummary {
+  id: string;
+  projectName: string;
+  userName: string;
+  videoLabel: string;
+  status: string;
+  createdAt: string;
 }

@@ -7,7 +7,8 @@ export type Video = {
   src: string;
   label: string;
   description: string;
-  created_at: string;
+  linkCount: number;
+  createdAt: string;
 };
 
 export enum VideoStatus {

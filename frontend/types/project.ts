@@ -1,4 +1,3 @@
-import { Assignment } from "@/types/assignment";
 import { Behavior } from "@/types/behavior";
 import { User } from "@/types/user";
 import { Video } from "@/types/video";
@@ -16,7 +15,6 @@ export interface ProjectVideo {
   projectId: string;
   videoId: string;
   video: Video;
-  assignments?: Assignment[];
   createdAt: string | null;
 }
 
@@ -28,6 +26,5 @@ export interface Project {
   behaviors: Behavior[];
   projectVideos: ProjectVideo[];
   projectMembers: ProjectMember[];
-  assignments: Assignment[];
   createdAt: string;
 }
