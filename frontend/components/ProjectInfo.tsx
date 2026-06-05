@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Inbox, Download } from "lucide-react";
+import { CircleCheck, CircleX, Inbox, Download } from "lucide-react";
 import { useProjectStore } from "@/store/useProjectStore";
 import { AssignmentSummary } from "@/types/assignment";
 import { ProjectVideoReport } from "@/types/report";
@@ -128,25 +128,30 @@ const ProjectInfo = () => {
   };
 
   const exportVideoAssignments = (video: ProjectVideoReport) => {
-    const assignmentIds = video.assignments.map((a) => a.assignmentId);
-    assignmentIds.forEach(async (id) => {
-      const url = `http://localhost:8000/api/v1/assignments/${id}/export`;
-      const res = await fetch(url, {
-        credentials: "include",
-      });
+    video.assignments.forEach(async (assignment) => {
+      const res = await fetch(
+        `http://localhost:8000/api/v1/assignments/${assignment.assignmentId}/export`,
+        {
+          credentials: "include",
+        },
+      );
       if (!res.ok) {
-        alert(`Failed to export assignment ${id}`);
+        alert(`Failed to export assignment ${assignment.assignmentId}`);
         return;
       }
       const blob = await res.blob();
-      const urlBlob = URL.createObjectURL(blob);
+      const url = window.URL.createObjectURL(blob);
       const a = document.createElement("a");
-      a.href = urlBlob;
-      a.download = `assignment_${id}.json`;
-      document.body.appendChild(a);
+      a.href = url;
+      const contentDisposition = res.headers.get("Content-Disposition");
+      const filename =
+        contentDisposition?.match(/filename="?([^"]+)"?/)?.[1] ??
+        `${currentProject?.name}_${video.videoLabel}_${assignment.userName}.csv`;
+
+      a.download = filename;
       a.click();
-      a.remove();
-      URL.revokeObjectURL(urlBlob);
+
+      window.URL.revokeObjectURL(url);
     });
   };
 
@@ -208,7 +213,7 @@ const ProjectInfo = () => {
                       )
                         ? "Completed"
                         : video.assignments.some(
-                              (a) => a.status === VideoStatus.IN_PROGRESS,
+                              (a) => a.status !== VideoStatus.NOT_STARTED,
                             )
                           ? "In Progress"
                           : "Not Started"}
@@ -259,6 +264,10 @@ const ProjectInfo = () => {
                                         Last Updated
                                       </th>
 
+                                      <th className='text-left py-2'>
+                                        Submitted
+                                      </th>
+
                                       {Object.keys(
                                         video.assignments[0]?.segmentCounts ??
                                           {},
@@ -287,6 +296,21 @@ const ProjectInfo = () => {
                                                 assignment.updatedAt,
                                               ).toLocaleString()
                                             : "N/A"}
+                                        </td>
+
+                                        <td className='py-2'>
+                                          {assignment.status ===
+                                          VideoStatus.COMPLETED ? (
+                                            <CircleCheck
+                                              size={20}
+                                              className='text-secondary'
+                                            />
+                                          ) : (
+                                            <CircleX
+                                              size={20}
+                                              className='text-destructive'
+                                            />
+                                          )}
                                         </td>
 
                                         {Object.keys(

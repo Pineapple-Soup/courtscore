@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends
+from fastapi.responses import StreamingResponse
 
 from app.api.dependencies import get_assignment_service
 from app.database.schemas import UpdateAssignmentRequest, AssignmentResponse, AssignmentSummaryResponse
@@ -51,3 +52,17 @@ def get_assignment_context(
     assignment_service: AssignmentService = Depends(get_assignment_service),
 ):
     return assignment_service.get_assignment_context(assignment_id)
+
+@router.get("/{assignment_id}/export", status_code=200)
+def export_assignment(
+    assignment_id: str,
+    assignment_service: AssignmentService = Depends(get_assignment_service),
+):
+    stream, filename = assignment_service.export_assignment(assignment_id)
+    return StreamingResponse(
+        stream,
+        media_type="text/csv",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"'
+        },
+    )

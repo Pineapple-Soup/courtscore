@@ -3,10 +3,10 @@
 import { useEffect, useState } from "react";
 import { useAnnotationStore } from "@/store/useAnnotationStore";
 import { useAssignmentStore } from "@/store/useAssignmentStore";
+import { Assignment } from "@/types/assignment";
 import { VideoStatus } from "@/types/video";
 import ResetModal from "@/components/ResetModal";
 import Modal from "@/components/Modal";
-import { Assignment } from "@/types/assignment";
 
 const ControlPanel = () => {
   const currentAssignmentId = useAssignmentStore((s) => s.currentAssignmentId);
@@ -71,43 +71,40 @@ const ControlPanel = () => {
   };
 
   const handleExport = async () => {
-    // TODO: Migrate to API endpoint
-    // const behaviorLabels = behaviors.map((behavior) => behavior.name);
-    // const minTime = 0;
-    // const maxTime = 600;
-    // const timePoints = [];
-    // for (let t = minTime; t <= maxTime; t++) {
-    //   timePoints.push(t);
-    // }
-    // const formatTime = (seconds: number): string => {
-    //   const minutes = Math.floor(seconds / 60);
-    //   const remainingSeconds = seconds % 60;
-    //   return `${minutes}:${remainingSeconds.toString().padStart(2, "0")}`;
-    // };
-    // const csvRows = [
-    //   ["time", ...behaviorLabels],
-    //   ...timePoints.map((time) => {
-    //     const activeBehaviors = getActiveBehaviors(time);
-    //     return [
-    //       formatTime(time),
-    //       ...behaviorLabels.map((label) => {
-    //         return activeBehaviors.some((behavior) => behavior.name === label)
-    //           ? label
-    //           : "";
-    //       }),
-    //     ];
-    //   }),
-    // ];
-    // const csvContent = csvRows.map((row) => row.join(",")).join("\n");
-    // const blob = new Blob([csvContent], { type: "text/csv" });
-    // const url = URL.createObjectURL(blob);
-    // const a = document.createElement("a");
-    // a.href = url;
-    // a.download = videoInfo ? `${videoInfo.label}.csv` : `${videoId}.csv`;
-    // document.body.appendChild(a);
-    // a.click();
-    // document.body.removeChild(a);
-    // URL.revokeObjectURL(url);
+    if (!currentAssignmentId) return;
+
+    try {
+      const res = await fetch(
+        `http://localhost:8000/api/v1/assignments/${currentAssignmentId}/export`,
+        {
+          credentials: "include",
+        },
+      );
+      if (!res.ok) {
+        alert(`Failed to export assignment ${currentAssignmentId}`);
+        return;
+      }
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      const contentDisposition = res.headers.get("Content-Disposition");
+      const filename =
+        contentDisposition?.match(/filename="?([^"]+)"?/)?.[1] ??
+        `${currentAssignmentId}.csv`;
+
+      a.download = filename;
+      a.click();
+
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error("Failed to export assignment", err);
+      alert(
+        err instanceof Error
+          ? `Failed to export assignment: ${err.message}`
+          : "Failed to export assignment",
+      );
+    }
   };
 
   const handleSave = async () => {
