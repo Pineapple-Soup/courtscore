@@ -18,6 +18,7 @@ interface BehaviorManagerProps {
 const BehaviorManager = ({ behaviors, setBehaviors }: BehaviorManagerProps) => {
   const [name, setName] = useState("");
   const [hotkey, setHotkey] = useState("");
+  const [threshold, setThreshold] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const handleAddBehavior = () => {
@@ -36,9 +37,13 @@ const BehaviorManager = ({ behaviors, setBehaviors }: BehaviorManagerProps) => {
         setError("A behavior with this hotkey already exists.");
         return;
       }
-      setBehaviors([...behaviors, { name, hotkey }]);
+      setBehaviors([
+        ...behaviors,
+        { name, hotkey, threshold: threshold ?? undefined },
+      ]);
       setName("");
       setHotkey("");
+      setThreshold(null);
       setError(null);
     }
   };
@@ -73,7 +78,7 @@ const BehaviorManager = ({ behaviors, setBehaviors }: BehaviorManagerProps) => {
             placeholder='Behavior Name'
             value={name}
             onChange={(e) => setName(e.target.value)}
-            className='w-full md:col-span-3 px-3 py-2 rounded-md border border-border focus:outline-none focus:ring-2 focus:ring-ring'
+            className='w-full md:col-span-2 px-3 py-2 rounded-md border border-border focus:outline-none focus:ring-2 focus:ring-ring'
           />
           <input
             type='text'
@@ -81,6 +86,17 @@ const BehaviorManager = ({ behaviors, setBehaviors }: BehaviorManagerProps) => {
             value={hotkey}
             onChange={(e) => setHotkey(e.target.value.slice(0, 1))}
             maxLength={1}
+            className='w-full md:col-span-1 px-3 py-2 rounded-md border border-border focus:outline-none focus:ring-2 focus:ring-ring'
+          />
+          <input
+            type='number'
+            placeholder='Threshold'
+            value={threshold ?? ""}
+            onChange={(e) =>
+              setThreshold(
+                e.target.value === "" ? null : Number(e.target.value),
+              )
+            }
             className='w-full md:col-span-1 px-3 py-2 rounded-md border border-border focus:outline-none focus:ring-2 focus:ring-ring'
           />
         </div>
@@ -138,7 +154,11 @@ const BehaviorManager = ({ behaviors, setBehaviors }: BehaviorManagerProps) => {
                           <p className='text-sm'>
                             [{behavior.hotkey}] {" - "}
                             <span className='font-semibold'>
-                              {behavior.name}
+                              {behavior.name}{" "}
+                              <span className='text-xs text-muted-foreground italic'>
+                                {behavior.threshold !== undefined &&
+                                  `(Threshold: ${behavior.threshold})`}
+                              </span>
                             </span>
                           </p>
                         </div>
