@@ -2,10 +2,9 @@
 
 import { useState } from "react";
 import { Mail, Lock, User, ShieldAlert } from "lucide-react";
+import api, { ApiError } from "@/lib/api";
 
 type LoginType = "login" | "register";
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 const Login = () => {
   const [loginType, setLoginType] = useState<LoginType>("login");
@@ -22,7 +21,8 @@ const Login = () => {
   };
 
   const googleLogin = () => {
-    window.location.href = `${API_URL}/auth/google/login`;
+    const baseUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+    window.location.href = `${baseUrl}/auth/google/login`;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -35,34 +35,34 @@ const Login = () => {
       const body =
         loginType == "login" ? { email, password } : { name, email, password };
 
-      const response = await fetch(`${API_URL}${endpoint}`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        credentials: "include",
-        body: JSON.stringify(body),
-      });
+      await api.post(endpoint, body, { skipAuthRedirect: true });
 
-      const data = await response.json();
-
-      if (!response.ok) {
-        if (response.status === 422) {
-          const message = data?.detail["0"]?.msg;
-
-          setError(message.split(",")[1].trim());
-          return;
-        }
-        throw new Error(data.detail || "Authentication failed");
-      }
-
+      clearForm();
       window.location.href = "/dashboard";
     } catch (err) {
-      const message = err instanceof Error ? err.message : "An error occurred";
-      setError(message);
+      if (err instanceof ApiError) {
+        if (err.status === 422) {
+          const detailArray = err.data as { detail?: Array<{ msg: string }> };
+          const validationMsg = detailArray?.detail?.[0]?.msg;
+
+          if (validationMsg && validationMsg.includes(",")) {
+            setError(validationMsg.split(",")[1].trim());
+          } else {
+            setError(validationMsg || "Validation error occurred.");
+          }
+          return;
+        }
+
+        // Fallback for standard 400/401/500 API errors
+        setError(err.message || "Authentication failed");
+      } else {
+        // Non-API exceptions
+        setError(
+          err instanceof Error ? err.message : "An unexpected error occurred",
+        );
+      }
     } finally {
       setIsLoading(false);
-      clearForm();
     }
   };
 
@@ -101,6 +101,7 @@ const Login = () => {
                 type='button'
                 onClick={() => {
                   setLoginType("login");
+                  clearForm();
                   setError("");
                 }}
                 className={`flex-1 px-3 py-2 text-xs font-bold uppercase tracking-widest rounded-md transition-all cursor-pointer ${
@@ -114,6 +115,7 @@ const Login = () => {
                 type='button'
                 onClick={() => {
                   setLoginType("register");
+                  clearForm();
                   setError("");
                 }}
                 className={`flex-1 px-3 py-2 text-xs font-bold uppercase tracking-widest rounded-md transition-all cursor-pointer ${
@@ -146,6 +148,7 @@ const Login = () => {
                       onChange={(e) => setName(e.target.value)}
                       className='w-full pl-9 pr-3 py-2 bg-background border border-input rounded-md font-mono text-sm focus:outline-none focus:ring-2 focus:ring-ring transition-all placeholder:text-muted-foreground/30'
                       placeholder='Enter username'
+                      autoComplete='name'
                     />
                   </div>
                 </div>
@@ -169,6 +172,7 @@ const Login = () => {
                     onChange={(e) => setEmail(e.target.value)}
                     className='w-full pl-9 pr-3 py-2 bg-background border border-input rounded-md font-mono text-sm focus:outline-none focus:ring-2 focus:ring-ring transition-all placeholder:text-muted-foreground/30'
                     placeholder='example@score.com'
+                    autoComplete='email'
                   />
                 </div>
               </div>
@@ -196,6 +200,11 @@ const Login = () => {
                         : "At least 8 characters"
                     }
                     minLength={loginType === "login" ? undefined : 8}
+                    autoComplete={
+                      loginType === "login"
+                        ? "current-password"
+                        : "new-password"
+                    }
                   />
                 </div>
               </div>
@@ -275,20 +284,10 @@ const Login = () => {
                   d='M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z'
                 />
               </svg>
-              Google OAuth
+              Google
             </button>
           </div>
         </div>
-
-        {/* Telemetry Footer
-        <div className='flex justify-between items-center text-[9px] font-mono text-muted-foreground uppercase px-2 tracking-wider'>
-          <span>Node: client_main</span>
-          <span>Ping: 14ms</span>
-          <span className='flex items-center gap-1.5'>
-            <span className='h-1.5 w-1.5 rounded-full bg-secondary animate-pulse' />
-            Online
-          </span>
-        </div> */}
       </div>
     </div>
   );
