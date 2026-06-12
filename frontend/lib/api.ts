@@ -72,6 +72,7 @@ async function request<T = unknown>(
     responseType = "json",
     skipAuthRedirect = false,
     headers: extraHeaders,
+    signal,
     ...rest
   } = options;
 
@@ -111,6 +112,7 @@ async function request<T = unknown>(
     headers,
     body: resolvedBody,
     credentials: "include",
+    signal,
   });
 
   // ---- 401 handling ----
@@ -186,7 +188,11 @@ const api = {
     return request<T>(endpoint, { ...options, method: "PATCH", body });
   },
 
-  del<T = unknown>(endpoint: string, options?: ApiOptions): Promise<T> {
+  del<T = unknown>(
+    endpoint: string,
+    body?: unknown,
+    options?: ApiOptions,
+  ): Promise<T> {
     return request<T>(endpoint, { ...options, method: "DELETE" });
   },
 };
