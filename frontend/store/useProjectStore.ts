@@ -1,5 +1,6 @@
 import { create } from "zustand";
-import { Project, ProjectMember } from "@/types/project";
+import { Project, ProjectMember, ProjectVideo } from "@/types/project";
+import api, { ApiError } from "@/lib/api";
 
 interface ProjectState {
   byId: Record<string, Project>;
@@ -44,14 +45,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     }));
     console.log(payload);
     try {
-      const res = await fetch("http://localhost:8000/api/v1/projects", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify(payload),
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const created = await res.json();
+      const created = await api.post<Project>("/api/v1/projects", payload);
 
       // replace temp entry with authoritative one
       set((state) => {
@@ -88,17 +82,10 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     set({ loading: true, error: null });
 
     try {
-      const res = await fetch(
-        `http://localhost:8000/api/v1/projects/${currentProject.id}`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          credentials: "include",
-          body: JSON.stringify(payload),
-        },
+      const updatedProject = await api.post<Project>(
+        `/api/v1/projects/${currentProject.id}`,
+        payload,
       );
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const updatedProject: Project = await res.json();
 
       set((state) => ({
         byId: {
@@ -127,11 +114,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     set({ loading: true, error: null });
 
     try {
-      const res = await fetch("http://localhost:8000/api/v1/projects", {
-        credentials: "include",
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json();
+      const data = await api.get<Project[]>(`/api/v1/projects`);
       const byId: Record<string, Project> = {};
       const ids: string[] = [];
       (data || []).forEach((p: Project) => {
@@ -158,14 +141,9 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
 
     try {
       const currentProjectId = currentProject.id;
-      const res = await fetch(
-        `http://localhost:8000/api/v1/projects/${currentProjectId}`,
-        {
-          credentials: "include",
-        },
+      const data = await api.get<Project>(
+        `/api/v1/projects/${currentProjectId}`,
       );
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json();
       set((state) => {
         const nextIds = state.ids.includes(currentProjectId)
           ? state.ids
@@ -194,14 +172,9 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
 
     try {
       const currentProjectId = currentProject.id;
-      const res = await fetch(
-        `http://localhost:8000/api/v1/projects/${currentProjectId}/videos`,
-        {
-          credentials: "include",
-        },
+      const data = await api.get<ProjectVideo[]>(
+        `/api/v1/projects/${currentProjectId}/videos`,
       );
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json();
       set((state) => {
         const base =
           state.byId[currentProjectId] ??
@@ -237,14 +210,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     set({ loading: true, error: null });
 
     try {
-      const res = await fetch(
-        `http://localhost:8000/api/v1/projects/${projectId}`,
-        {
-          method: "DELETE",
-          credentials: "include",
-        },
-      );
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      await api.del(`/api/v1/projects/${projectId}`);
       set((state) => {
         const newById = { ...state.byId };
         delete newById[projectId];
@@ -267,14 +233,9 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
 
     try {
       const currentProjectId = currentProject.id;
-      const res = await fetch(
-        `http://localhost:8000/api/v1/projects/${currentProjectId}/members`,
-        {
-          credentials: "include",
-        },
+      const projectMembers = await api.get<ProjectMember[]>(
+        `/api/v1/projects/${currentProjectId}/members`,
       );
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const projectMembers: ProjectMember[] = await res.json();
       set((state) => {
         const updatedProject = {
           ...state.byId[currentProjectId],
@@ -306,23 +267,10 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
 
     try {
       const currentProjectId = currentProject.id;
-      const res = await fetch(
-        `http://localhost:8000/api/v1/projects/${currentProjectId}/members`,
-        {
-          method: "POST",
-          credentials: "include",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ userId }),
-        },
+      const updatedProject = await api.post<Project>(
+        `/api/v1/projects/${currentProjectId}/members`,
+        { userId },
       );
-      if (!res.ok) {
-        if (res.status === 409) {
-          console.warn("User is already a member of this project.");
-          return; // Exit gracefully
-        }
-        throw new Error(`HTTP ${res.status}`);
-      }
-      const updatedProject: Project = await res.json();
       set((state) => ({
         byId: {
           ...state.byId,
@@ -334,6 +282,10 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
             : state.currentProject,
       }));
     } catch (err) {
+      if (err instanceof ApiError && err.message.includes("409")) {
+        console.warn("User is already a member of this project.");
+        return; // Exit gracefully
+      }
       set({ error: err instanceof Error ? err.message : String(err) });
     } finally {
       set({ loading: false });
@@ -347,17 +299,10 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
 
     try {
       const currentProjectId = currentProject.id;
-      const res = await fetch(
-        `http://localhost:8000/api/v1/projects/${currentProjectId}/members/`,
-        {
-          method: "DELETE",
-          credentials: "include",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ userId }),
-        },
+      const updatedProject = await api.del<Project>(
+        `/api/v1/projects/${currentProjectId}/members`,
+        { userId },
       );
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const updatedProject: Project = await res.json();
       set((state) => ({
         byId: {
           ...state.byId,
@@ -383,17 +328,10 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
 
     try {
       const currentProjectId = currentProject.id;
-      const res = await fetch(
-        `http://localhost:8000/api/v1/projects/${currentProjectId}/videos`,
-        {
-          method: "POST",
-          credentials: "include",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ videoId }),
-        },
+      const updatedProject = await api.post<Project>(
+        `/api/v1/projects/${currentProjectId}/videos`,
+        { videoId },
       );
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const updatedProject: Project = await res.json();
       set((state) => ({
         byId: {
           ...state.byId,
@@ -419,17 +357,10 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
 
     try {
       const currentProjectId = currentProject.id;
-      const res = await fetch(
-        `http://localhost:8000/api/v1/projects/${currentProjectId}/videos`,
-        {
-          method: "DELETE",
-          credentials: "include",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ videoId }),
-        },
+      const updatedProject = await api.del<Project>(
+        `/api/v1/projects/${currentProjectId}/videos`,
+        { videoId },
       );
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const updatedProject: Project = await res.json();
       set((state) => ({
         byId: {
           ...state.byId,

@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { ProjectMember } from "@/types/project";
 import { User } from "@/types/user";
+import api from "@/lib/api";
 
 declare global {
   interface UserSearchCacheEntry {
@@ -57,11 +58,7 @@ export const useUserStore = create<UserState>((set) => ({
 
   fetchUsers: async () => {
     try {
-      const res = await fetch("http://localhost:8000/api/v1/users", {
-        credentials: "include",
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json();
+      const data = await api.get<User[]>(`/api/v1/users`);
       set({ users: data });
     } catch (err) {
       console.error("fetchUsers error", err);
@@ -72,11 +69,7 @@ export const useUserStore = create<UserState>((set) => ({
   fetchCurrentUser: async () => {
     set({ loading: true, error: null });
     try {
-      const res = await fetch("http://localhost:8000/auth/me", {
-        credentials: "include",
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json();
+      const data = await api.get<User>(`/auth/me`);
       set({ currentUser: data, isAdmin: data?.role === "admin" });
     } catch (err) {
       set({
@@ -105,17 +98,14 @@ export const useUserStore = create<UserState>((set) => ({
 
   promoteUser: async (userId: string) => {
     try {
-      const res = await fetch(`http://localhost:8000/api/v1/users/promote?user_id=${userId}`, {
-        credentials: "include",
-      });
-      if (!res.ok) {
-        const errorData = await res.json().catch(() => ({}));
-        throw new Error(errorData.detail || `HTTP ${res.status}`);
-      }
-      const updatedUser = await res.json();
+      const updatedUser = await api.get<User>(
+        `/api/v1/users/promote?user_id=${userId}`,
+      );
       set((state) => ({
         users: state.users
-          ? state.users.map((u) => (u.id === updatedUser.id ? { ...u, ...updatedUser } : u))
+          ? state.users.map((u) =>
+              u.id === updatedUser.id ? { ...u, ...updatedUser } : u,
+            )
           : null,
       }));
     } catch (err) {
@@ -126,14 +116,7 @@ export const useUserStore = create<UserState>((set) => ({
 
   deleteUser: async (userId: string) => {
     try {
-      const res = await fetch(`http://localhost:8000/api/v1/users/${userId}`, {
-        method: "DELETE",
-        credentials: "include",
-      });
-      if (!res.ok) {
-        const errorData = await res.json().catch(() => ({}));
-        throw new Error(errorData.detail || `HTTP ${res.status}`);
-      }
+      await api.del(`/api/v1/users/${userId}`);
       set((state) => ({
         users: state.users ? state.users.filter((u) => u.id !== userId) : null,
       }));
@@ -176,15 +159,9 @@ export const useUserStore = create<UserState>((set) => ({
       }
 
       if (!allUsers) {
-        const res = await fetch(`http://localhost:8000/api/v1/users`, {
-          credentials: "include",
+        allUsers = await api.get<User[]>(`/api/v1/users`, {
           signal: opts?.signal,
         });
-        if (!res.ok) {
-          if (res.status === 403) return { items: [], total: 0 };
-          throw new Error(`HTTP ${res.status}`);
-        }
-        allUsers = await res.json();
         cache.set(cacheKey, { expiresAt: now + 60_000, all: allUsers ?? [] });
       }
 
@@ -192,18 +169,11 @@ export const useUserStore = create<UserState>((set) => ({
       const excludeIds = new Set<string>();
       if (opts?.excludeProjectId) {
         try {
-          const mres = await fetch(
-            `http://localhost:8000/api/v1/projects/${opts.excludeProjectId}/members`,
-            {
-              credentials: "include",
-              signal: opts?.signal,
-            },
+          const projectMembers = await api.get<ProjectMember[]>(
+            `/api/v1/projects/${opts.excludeProjectId}/members`,
+            { signal: opts?.signal },
           );
-          if (mres.ok) {
-            const projectMembers: ProjectMember[] = await mres.json();
-            const users = projectMembers.map((m) => m.user);
-            users.map((u) => excludeIds.add(u.id));
-          }
+          projectMembers.forEach((m) => excludeIds.add(m.user.id));
         } catch (err) {
           if ((err as Error)?.name === "AbortError") throw err;
           // ignore member fetch failures and continue with full list
