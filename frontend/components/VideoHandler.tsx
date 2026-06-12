@@ -2,7 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { useAssignmentStore } from "@/store/useAssignmentStore";
+import { Behavior } from "@/types/behavior";
 import VideoPlayer from "@/components/VideoPlayer";
+import api from "@/lib/api";
 
 const VideoHandler = () => {
   const currentAssignmentId = useAssignmentStore((s) => s.currentAssignmentId);
@@ -12,14 +14,9 @@ const VideoHandler = () => {
     if (!currentAssignmentId) return;
     const fetchAssignmentContext = async () => {
       try {
-        const res = await fetch(
-          `http://localhost:8000/api/v1/assignments/${currentAssignmentId}/context`,
-          { credentials: "include" },
+        const data = await api.get<{ video_id: string; behaviors: Behavior[] }>(
+          `/api/v1/assignments/${currentAssignmentId}/context`,
         );
-        if (!res.ok) {
-          throw new Error("Failed to fetch assignment context");
-        }
-        const data = await res.json();
         return data;
       } catch (err) {
         console.error(err);
@@ -29,14 +26,9 @@ const VideoHandler = () => {
 
     const getSignedURL = async (id: string) => {
       try {
-        const res = await fetch(
-          `http://localhost:8000/api/v1/videos/${id}/url`,
-          {
-            credentials: "include",
-          },
+        const data = await api.get<{ signedUrl: string }>(
+          `/api/v1/videos/${id}/url`,
         );
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const data = await res.json();
         if (data.signedUrl) {
           return data.signedUrl;
         } else {

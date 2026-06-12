@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Behavior, BehaviorStatus } from "@/types/behavior";
 import { useAnnotationStore } from "@/store/useAnnotationStore";
 import { useAssignmentStore } from "@/store/useAssignmentStore";
+import api from "@/lib/api";
 
 const BehaviorToggles = () => {
   const currentAssignmentId = useAssignmentStore((s) => s.currentAssignmentId);
@@ -20,14 +21,9 @@ const BehaviorToggles = () => {
     if (!currentAssignmentId) return;
     const fetchAssignmentContext = async () => {
       try {
-        const res = await fetch(
-          `http://localhost:8000/api/v1/assignments/${currentAssignmentId}/context`,
-          { credentials: "include" },
+        const data = await api.get<{ behaviors: Behavior[] }>(
+          `/api/v1/assignments/${currentAssignmentId}/context`,
         );
-        if (!res.ok) {
-          throw new Error("Failed to fetch assignment context");
-        }
-        const data = await res.json();
         return data;
       } catch (err) {
         console.error(err);
