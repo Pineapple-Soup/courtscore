@@ -177,7 +177,7 @@ const ProjectInfo = () => {
                     <td className='p-4'>
                       {video.assignments.every(
                         (a) => a.status === VideoStatus.COMPLETED,
-                      )
+                      ) && video.assignments.length > 0
                         ? "Completed"
                         : video.assignments.some(
                               (a) => a.status !== VideoStatus.NOT_STARTED,
