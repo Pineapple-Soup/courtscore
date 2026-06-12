@@ -2,8 +2,8 @@
 
 import { useState } from "react";
 import { useAnnotationStore } from "@/store/useAnnotationStore";
+import { Segment } from "@/types/annotation";
 import { BehaviorStatus } from "@/types/behavior";
-import { Segment } from "@/types/segment";
 import Modal from "@/components/Modal";
 
 interface SegmentModalProps {

@@ -1,6 +1,6 @@
 import { create } from "zustand";
+import { Segment } from "@/types/annotation";
 import { Behavior, BehaviorStatus } from "@/types/behavior";
-import { Segment } from "@/types/segment";
 
 interface AnnotationState {
   currentTime: number;
