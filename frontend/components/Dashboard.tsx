@@ -13,13 +13,14 @@ import {
 import { useAssignmentStore } from "@/store/useAssignmentStore";
 import { useProjectStore } from "@/store/useProjectStore";
 import { useUserStore, Tabs } from "@/store/useUserStore";
-import Panel from "@/components/Panel";
 import AssignmentList from "@/components/AssignmentList";
+import Panel from "@/components/Panel";
 import ProjectCreate from "@/components/ProjectCreate";
 import ProjectList from "@/components/ProjectList";
+import UserList from "@/components/UserList";
 import VideoCreate from "@/components/VideoCreate";
 import VideoList from "@/components/VideoList";
-import UserList from "@/components/UserList";
+import api from "@/lib/api";
 
 const Dashboard = () => {
   const router = useRouter();
@@ -49,10 +50,7 @@ const Dashboard = () => {
 
   const handleLogout = async () => {
     try {
-      await fetch("http://localhost:8000/auth/logout", {
-        method: "POST",
-        credentials: "include",
-      });
+      await api.post("/auth/logout");
       clearUser();
       router.push("/login");
     } catch (error) {

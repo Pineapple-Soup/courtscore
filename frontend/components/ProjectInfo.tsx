@@ -7,6 +7,7 @@ import { AssignmentSummary } from "@/types/assignment";
 import { ProjectVideoReport } from "@/types/report";
 import { VideoStatus } from "@/types/video";
 import SystemLoading from "@/components/SystemLoading";
+import api from "@/lib/api";
 
 const ProjectInfo = () => {
   const currentProject = useProjectStore((s) => s.currentProject);
@@ -22,18 +23,9 @@ const ProjectInfo = () => {
     if (!currentProject || loading) return;
     const loadProjectVideos = async () => {
       try {
-        const res = await fetch(
-          `http://localhost:8000/api/v1/projects/${currentProject.id}/videos/detail`,
-          {
-            credentials: "include",
-          },
+        const reportData = await api.get<ProjectVideoReport[]>(
+          `/api/v1/projects/${currentProject.id}/videos/detail`,
         );
-
-        if (!res.ok) {
-          throw new Error("Failed to fetch report");
-        }
-
-        const reportData: ProjectVideoReport[] = await res.json();
         setProjectVideoReport(reportData);
       } catch (error) {
         console.error(error);
@@ -42,14 +34,9 @@ const ProjectInfo = () => {
 
     const loadAssignments = async () => {
       try {
-        const res = await fetch(
-          `http://localhost:8000/api/v1/projects/${currentProject.id}/assignments`,
-          {
-            credentials: "include",
-          },
+        const data = await api.get<AssignmentSummary[]>(
+          `/api/v1/projects/${currentProject.id}/assignments`,
         );
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const data = await res.json();
         setAssignments(data);
       } catch (err) {
         console.error("Failed to load assignments:", err);
@@ -84,14 +71,7 @@ const ProjectInfo = () => {
     }
     setLoading(true);
     try {
-      const res = await fetch(
-        `http://localhost:8000/api/v1/projects/${currentProject.id}/assignments`,
-        {
-          method: "POST",
-          credentials: "include",
-        },
-      );
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      await api.post(`/api/v1/projects/${currentProject.id}/assignments`);
       alert("Assignments created successfully.");
     } catch (err) {
       alert(
@@ -111,14 +91,7 @@ const ProjectInfo = () => {
 
     setLoading(true);
     try {
-      const res = await fetch(
-        `http://localhost:8000/api/v1/projects/${currentProject.id}/assignments`,
-        {
-          method: "DELETE",
-          credentials: "include",
-        },
-      );
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      await api.del(`/api/v1/projects/${currentProject.id}/assignments`);
       alert("Assignments reset successfully.");
     } catch (err) {
       alert(err instanceof Error ? err.message : "Failed to reset assignments");
@@ -129,16 +102,10 @@ const ProjectInfo = () => {
 
   const exportVideoAssignments = (video: ProjectVideoReport) => {
     video.assignments.forEach(async (assignment) => {
-      const res = await fetch(
-        `http://localhost:8000/api/v1/assignments/${assignment.assignmentId}/export`,
-        {
-          credentials: "include",
-        },
+      const res = await api.get<Response>(
+        `/api/v1/assignments/${assignment.assignmentId}/export`,
+        { responseType: "raw" },
       );
-      if (!res.ok) {
-        alert(`Failed to export assignment ${assignment.assignmentId}`);
-        return;
-      }
       const blob = await res.blob();
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement("a");
