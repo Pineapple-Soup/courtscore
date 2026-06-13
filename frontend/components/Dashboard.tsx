@@ -26,10 +26,8 @@ const Dashboard = () => {
   const router = useRouter();
 
   const currentUser = useUserStore((s) => s.currentUser);
-  const loading = useUserStore((s) => s.loading);
   const isAdmin = useUserStore((s) => s.isAdmin);
   const activeTab = useUserStore((s) => s.activeTab);
-  const fetchCurrentUser = useUserStore((s) => s.fetchCurrentUser);
   const clearUser = useUserStore((s) => s.clearUser);
   const setActiveTab = useUserStore((s) => s.setActiveTab);
 
@@ -39,14 +37,9 @@ const Dashboard = () => {
   const setCurrentProject = useProjectStore((s) => s.setCurrentProject);
 
   useEffect(() => {
-    fetchCurrentUser();
     setCurrentProject(null);
     resetCurrentAssignment();
-  }, [fetchCurrentUser, setCurrentProject, resetCurrentAssignment]);
-
-  useEffect(() => {
-    if (!loading && !currentUser) router.push("/login");
-  }, [loading, currentUser, router]);
+  }, [setCurrentProject, resetCurrentAssignment]);
 
   const handleLogout = async () => {
     try {
@@ -57,19 +50,6 @@ const Dashboard = () => {
       console.error("Logout failed:", error);
     }
   };
-
-  if (loading) {
-    return (
-      <div className='flex items-center justify-center h-screen bg-background font-sans'>
-        <div className='flex flex-col items-center gap-2'>
-          <div className='h-8 w-8 border-4 border-t-primary border-muted rounded-full animate-spin' />
-          <p className='text-xs font-bold uppercase tracking-widest text-muted-foreground'>
-            Authenticating...
-          </p>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className='flex flex-col min-h-screen bg-background text-foreground'>
