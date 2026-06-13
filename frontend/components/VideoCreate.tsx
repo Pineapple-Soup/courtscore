@@ -51,7 +51,7 @@ const VideoCreate = () => {
       </div>
 
       {useModal && (
-        <Modal title='Create New Project' onClose={() => setUseModal(false)}>
+        <Modal title='Upload Video' onClose={() => setUseModal(false)}>
           <div className='flex flex-col items-center justify-center text-center space-y-4'>
             <form
               onSubmit={(e) => {
@@ -68,7 +68,7 @@ const VideoCreate = () => {
                   onChange={(e) => setLabel(e.target.value)}
                   disabled={loading}
                   className='w-full px-3 py-2 rounded-md border border-border focus:outline-none focus:ring-2 focus:ring-ring'
-                  placeholder='e.g. Drosophilia Courtship Experiments'
+                  placeholder='e.g. ETH-Gal4 Experiment 2.1'
                   required
                 />
               </div>
@@ -83,7 +83,7 @@ const VideoCreate = () => {
                   disabled={loading}
                   className='w-full px-3 py-2 rounded-md border border-border font-mono focus:outline-none focus:ring-2 focus:ring-ring'
                   rows={3}
-                  placeholder='Optional project description'
+                  placeholder='Optional video description'
                 />
               </div>
 
