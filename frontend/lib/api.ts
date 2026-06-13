@@ -59,6 +59,103 @@ function handleUnauthorized(): void {
 }
 
 // ---------------------------------------------------------------------------
+// Session refresh logic
+// ---------------------------------------------------------------------------
+
+/** How often (ms) the proactive refresh timer fires. Default: every 5 min. */
+const REFRESH_INTERVAL_MS = 5 * 60 * 1000;
+
+/**
+ * Singleton that manages proactive session refresh.
+ * Starts a background interval that calls POST /auth/refresh periodically,
+ * keeping the JWT cookie alive as long as the browser tab is open.
+ * Only runs on the client side.
+ */
+class SessionManager {
+  private intervalId: ReturnType<typeof setInterval> | null = null;
+  private started = false;
+
+  /** Begin the proactive refresh cycle. Safe to call multiple times. */
+  start(): void {
+    if (this.started || typeof window === "undefined") return;
+    this.started = true;
+
+    // Fire the first refresh after the interval, not immediately —
+    // the user just authenticated so the token is fresh.
+    this.intervalId = setInterval(() => {
+      void this.refresh();
+    }, REFRESH_INTERVAL_MS);
+
+    // Also refresh when the tab regains visibility after being hidden
+    // (e.g. user returns after a long break).
+    document.addEventListener("visibilitychange", this.onVisibilityChange);
+  }
+
+  /** Stop the proactive refresh cycle. */
+  stop(): void {
+    if (this.intervalId) {
+      clearInterval(this.intervalId);
+      this.intervalId = null;
+    }
+    this.started = false;
+    if (typeof document !== "undefined") {
+      document.removeEventListener("visibilitychange", this.onVisibilityChange);
+    }
+  }
+
+  private onVisibilityChange = (): void => {
+    if (document.visibilityState === "visible") {
+      void this.refresh();
+    }
+  };
+
+  /** Fire a single refresh request. Silently swallows errors. */
+  private async refresh(): Promise<void> {
+    try {
+      await fetch(`${BASE_URL}/auth/refresh`, {
+        method: "POST",
+        credentials: "include",
+      });
+    } catch {
+      // Network error – do nothing; the reactive 401 handler will
+      // catch it on the next real API call.
+    }
+  }
+}
+
+export const sessionManager = new SessionManager();
+
+// ---------------------------------------------------------------------------
+// Reactive refresh: retry once on 401 before giving up
+// ---------------------------------------------------------------------------
+
+let isRefreshing: Promise<boolean> | null = null;
+
+/**
+ * Attempt a single token refresh. Returns true if the refresh succeeded.
+ * Deduplicates concurrent callers so only one refresh request is in flight.
+ */
+async function attemptRefresh(): Promise<boolean> {
+  if (isRefreshing) return isRefreshing;
+
+  isRefreshing = (async () => {
+    try {
+      const res = await fetch(`${BASE_URL}/auth/refresh`, {
+        method: "POST",
+        credentials: "include",
+      });
+      return res.ok;
+    } catch {
+      return false;
+    } finally {
+      isRefreshing = null;
+    }
+  })();
+
+  return isRefreshing;
+}
+
+// ---------------------------------------------------------------------------
 // Core request function
 // ---------------------------------------------------------------------------
 
@@ -107,23 +204,35 @@ async function request<T = unknown>(
   }
 
   // ---- Fetch ----
-  const res = await fetch(url, {
+  const fetchOptions: RequestInit = {
     ...rest,
     headers,
     body: resolvedBody,
     credentials: "include",
     signal,
-  });
+  };
 
-  // ---- 401 handling ----
+  let res = await fetch(url, fetchOptions);
+
+  // ---- 401 handling with refresh retry ----
   if (res.status === 401 && !skipAuthRedirect) {
-    handleUnauthorized();
-    const errorData = await res.json().catch(() => ({}));
-    throw new ApiError(
-      (errorData as Record<string, string>)?.detail || "Unauthorized",
-      401,
-      errorData,
-    );
+    // Try to refresh the token once before giving up
+    const refreshed = await attemptRefresh();
+    if (refreshed) {
+      // Retry the original request with a fresh token
+      res = await fetch(url, fetchOptions);
+    }
+
+    // If still 401 after refresh (or refresh failed), redirect to login
+    if (res.status === 401) {
+      handleUnauthorized();
+      const errorData = await res.json().catch(() => ({}));
+      throw new ApiError(
+        (errorData as Record<string, string>)?.detail || "Unauthorized",
+        401,
+        errorData,
+      );
+    }
   }
 
   // ---- Error handling ----

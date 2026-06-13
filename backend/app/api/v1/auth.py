@@ -132,6 +132,32 @@ def get_current_user_info(
     return UserResponse.model_validate(user)
 
 
+@router.post("/refresh")
+def refresh_token(
+    request: Request,
+    response: Response,
+    db: Session = Depends(get_db),
+) -> dict[str, bool]:
+    """Issue a fresh JWT if the current session cookie is still valid."""
+    token = request.cookies.get("access_token")
+    if not token:
+        raise HTTPException(status_code=401, detail="Missing auth token")
+
+    payload = auth.decode_access_token(token)
+    user_id = payload.get("sub")
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Invalid token payload")
+
+    # Verify the user still exists
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=401, detail="User not found")
+
+    new_token = auth.create_access_token(str(user.id))
+    auth.set_auth_cookie(response, new_token)
+    return {"success": True}
+
+
 @router.post("/logout")
 def logout(response: Response) -> dict[str, bool]:
     response.delete_cookie("access_token")
