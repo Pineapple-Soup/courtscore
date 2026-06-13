@@ -193,7 +193,7 @@ const api = {
     body?: unknown,
     options?: ApiOptions,
   ): Promise<T> {
-    return request<T>(endpoint, { ...options, method: "DELETE" });
+    return request<T>(endpoint, { ...options, method: "DELETE", body });
   },
 };
 
