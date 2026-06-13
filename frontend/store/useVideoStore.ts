@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { ProjectVideo } from "@/types/project";
 import { Video } from "@/types/video";
+import api from "@/lib/api";
 
 declare global {
   interface VideoSearchCacheEntry {
@@ -46,13 +47,11 @@ export const useVideoStore = create<VideoStore>((set) => ({
       formData.append("file", file);
       formData.append("label", label);
       formData.append("description", description);
-      const res = await fetch("http://localhost:8000/api/v1/videos/upload", {
-        method: "POST",
-        body: formData,
-        credentials: "include",
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const newVideos = await res.json();
+      const newVideos = await api.post<Video[]>(
+        "/api/v1/videos/upload",
+        formData,
+      );
+
       set((state) => ({
         videos: state.videos ? [...state.videos, ...newVideos] : newVideos,
       }));
@@ -70,12 +69,8 @@ export const useVideoStore = create<VideoStore>((set) => ({
   fetchVideos: async () => {
     set({ loading: true });
     try {
-      const res = await fetch("http://localhost:8000/api/v1/videos", {
-        credentials: "include",
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json();
-      set({ videos: Array.isArray(data) ? data : [], error: null });
+      const videos = await api.get<Video[]>("/api/v1/videos");
+      set({ videos: Array.isArray(videos) ? videos : [], error: null });
     } catch (error) {
       set({
         videos: null,
@@ -90,14 +85,7 @@ export const useVideoStore = create<VideoStore>((set) => ({
   deleteVideo: async (videoId: string) => {
     set({ loading: true, error: null });
     try {
-      const res = await fetch(
-        `http://localhost:8000/api/v1/videos/${videoId}`,
-        {
-          method: "DELETE",
-          credentials: "include",
-        },
-      );
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      await api.del(`/api/v1/videos/${videoId}`);
       set((state) => ({
         videos: state.videos
           ? state.videos.filter((v) => v.id !== videoId)
@@ -141,35 +129,25 @@ export const useVideoStore = create<VideoStore>((set) => ({
       if (cached && cached.expiresAt > now) allVideos = cached.all;
 
       if (!allVideos) {
-        const res = await fetch(`http://localhost:8000/api/v1/videos`, {
-          credentials: "include",
+        allVideos = await api.get<Video[]>("/api/v1/videos", {
           signal: opts?.signal,
         });
-        if (!res.ok) {
-          if (res.status === 403) return { items: [], total: 0 };
-          throw new Error(`HTTP ${res.status}`);
-        }
-        allVideos = await res.json();
+        if (!Array.isArray(allVideos)) allVideos = [];
+
         cache.set(cacheKey, { expiresAt: now + 60_000, all: allVideos ?? [] });
       }
 
       const linkedIds = new Set<string>();
       if (opts?.unlinkedOnly && opts?.projectId) {
         try {
-          const pvRes = await fetch(
-            `http://localhost:8000/api/v1/projects/${opts.projectId}/videos`,
-            {
-              credentials: "include",
-              signal: opts?.signal,
-            },
+          const projectVideos = await api.get<ProjectVideo[]>(
+            `/api/v1/projects/${opts.projectId}/videos`,
+            { signal: opts?.signal },
           );
-          if (pvRes.ok) {
-            const linked = await pvRes.json();
-            linked.forEach((projectVideo: ProjectVideo) => {
-              const videoId = projectVideo.video?.id;
-              if (videoId) linkedIds.add(videoId);
-            });
-          }
+          projectVideos.forEach((pv) => {
+            const videoId = pv.video?.id;
+            if (videoId) linkedIds.add(videoId);
+          });
         } catch (err) {
           if ((err as Error)?.name === "AbortError") throw err;
           console.warn(

@@ -3,10 +3,12 @@
 import { useEffect, useState } from "react";
 import { useAnnotationStore } from "@/store/useAnnotationStore";
 import { useAssignmentStore } from "@/store/useAssignmentStore";
+import { Annotation, Segment } from "@/types/annotation";
 import { Assignment } from "@/types/assignment";
 import { VideoStatus } from "@/types/video";
 import ResetModal from "@/components/ResetModal";
 import Modal from "@/components/Modal";
+import api, { ApiError } from "@/lib/api";
 
 const ControlPanel = () => {
   const currentAssignmentId = useAssignmentStore((s) => s.currentAssignmentId);
@@ -15,6 +17,7 @@ const ControlPanel = () => {
   const submitted = useAnnotationStore((s) => s.submitted);
   const setSegments = useAnnotationStore((s) => s.setSegments);
   const setSubmitted = useAnnotationStore((s) => s.setSubmitted);
+  const hasActiveSegments = useAnnotationStore((s) => s.hasActiveSegments);
   const clearInProgress = useAnnotationStore((s) => s.clearInProgress);
 
   const [projectVideoId, setProjectVideoId] = useState<string>("");
@@ -26,14 +29,9 @@ const ControlPanel = () => {
     if (!currentAssignmentId) return;
     const fetchAssignment = async () => {
       try {
-        const res = await fetch(
-          `http://localhost:8000/api/v1/assignments/${currentAssignmentId}`,
-          { credentials: "include" },
+        const data = await api.get<Assignment>(
+          `/api/v1/assignments/${currentAssignmentId}`,
         );
-        if (!res.ok) {
-          throw new Error("Failed to fetch assignment context");
-        }
-        const data: Assignment = await res.json();
         return data;
       } catch (err) {
         console.error(err);
@@ -42,25 +40,20 @@ const ControlPanel = () => {
 
     const fetchAnnotationInfo = async () => {
       try {
-        const res = await fetch(
-          `http://localhost:8000/api/v1/annotations/${currentAssignmentId}`,
-          { credentials: "include" },
+        const data = await api.get<Annotation>(
+          `/api/v1/annotations/${currentAssignmentId}`,
         );
-        if (res.ok) {
-          const data = await res.json();
-          if (data) {
-            setSegments(data.segments);
-            setSubmitted(data.submitted, data.submitted_at);
-          }
+        if (data) {
+          setSegments(data.segments);
+          setSubmitted(data.submitted, data.submitted_at);
         }
       } catch (err) {
-        console.log("Failed to fetch annotation", err);
+        console.error("Failed to fetch annotation", err);
       }
     };
 
     fetchAssignment().then((assignment) => {
       setProjectVideoId(assignment?.projectVideoId || "");
-      console.log("Fetched assignment:", assignment);
       fetchAnnotationInfo();
     });
   }, [currentAssignmentId, projectVideoId, setSegments, setSubmitted]);
@@ -74,16 +67,10 @@ const ControlPanel = () => {
     if (!currentAssignmentId) return;
 
     try {
-      const res = await fetch(
-        `http://localhost:8000/api/v1/assignments/${currentAssignmentId}/export`,
-        {
-          credentials: "include",
-        },
+      const res = await api.get<Response>(
+        `/api/v1/assignments/${currentAssignmentId}/export`,
+        { responseType: "raw" },
       );
-      if (!res.ok) {
-        alert(`Failed to export assignment ${currentAssignmentId}`);
-        return;
-      }
       const blob = await res.blob();
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement("a");
@@ -100,7 +87,7 @@ const ControlPanel = () => {
     } catch (err) {
       console.error("Failed to export assignment", err);
       alert(
-        err instanceof Error
+        err instanceof ApiError
           ? `Failed to export assignment: ${err.message}`
           : "Failed to export assignment",
       );
@@ -110,20 +97,21 @@ const ControlPanel = () => {
   const handleSave = async () => {
     if (submitted) return;
 
-    const checkAnnotation = async () => {
+    if (hasActiveSegments()) {
+      alert(
+        "Cannot save while a segment is active. Please end all active segments before saving.",
+      );
+      return;
+    }
+
+    const checkAnnotationExists = async () => {
       try {
-        const res = await fetch(
-          `http://localhost:8000/api/v1/annotations/${currentAssignmentId}`,
-          { credentials: "include" },
-        );
-        if (res.ok) {
-          return await res.json();
-        } else if (res.status === 404) {
-          return null;
-        } else {
-          throw new Error("Failed to check annotation existence");
-        }
+        return await api.get(`/api/v1/annotations/${currentAssignmentId}`);
       } catch (err) {
+        // If it's a 404, the annotation doesn't exist yet, which is expected behavior
+        if (err instanceof ApiError && err.status === 404) {
+          return null;
+        }
         console.error("Error checking annotation existence", err);
         throw err;
       }
@@ -131,23 +119,11 @@ const ControlPanel = () => {
 
     const createAnnotation = async () => {
       try {
-        const res = await fetch(
-          `http://localhost:8000/api/v1/annotations/${currentAssignmentId}`,
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({ segments: segments }),
-            credentials: "include",
-          },
+        const data = await api.post<{ segments: Segment[] }>(
+          `/api/v1/annotations/${currentAssignmentId}`,
+          { segments },
         );
-        if (res.ok) {
-          const data = await res.json();
-          setSegments(data.segments);
-        } else {
-          throw new Error("Failed to create annotation");
-        }
+        setSegments(data.segments);
       } catch (err) {
         console.error("Error creating annotation", err);
         throw err;
@@ -156,23 +132,11 @@ const ControlPanel = () => {
 
     const updateAnnotation = async () => {
       try {
-        const res = await fetch(
-          `http://localhost:8000/api/v1/annotations/${currentAssignmentId}`,
-          {
-            method: "PUT",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({ segments: segments }),
-            credentials: "include",
-          },
+        const data = await api.put<{ segments: Segment[] }>(
+          `/api/v1/annotations/${currentAssignmentId}`,
+          { segments },
         );
-        if (res.ok) {
-          const data = await res.json();
-          setSegments(data.segments);
-        } else {
-          throw new Error("Failed to update annotation");
-        }
+        setSegments(data.segments);
       } catch (err) {
         console.error("Error updating annotation", err);
         throw err;
@@ -180,29 +144,21 @@ const ControlPanel = () => {
     };
 
     const updateAssignmentStatus = async () => {
+      if (!currentAssignmentId) return;
+
       try {
-        if (!currentAssignmentId) return;
         const status: VideoStatus =
           !segments || segments.length === 0
             ? VideoStatus.NOT_STARTED
             : VideoStatus.IN_PROGRESS;
 
-        const res = await fetch(
-          `http://localhost:8000/api/v1/assignments/${currentAssignmentId}`,
+        const data = await api.put(
+          `/api/v1/assignments/${currentAssignmentId}`,
           {
-            method: "PUT",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ status: status }),
-            credentials: "include",
+            status,
           },
         );
-
-        if (res.ok) {
-          const data = await res.json();
-          console.log(data);
-        } else {
-          throw new Error("Failed to update assignment status");
-        }
+        console.log(data);
       } catch (err) {
         console.error("Error updating assignment status", err);
         throw err;
@@ -210,7 +166,7 @@ const ControlPanel = () => {
     };
 
     try {
-      const existingAnnotation = await checkAnnotation();
+      const existingAnnotation = await checkAnnotationExists();
       if (existingAnnotation) {
         await updateAnnotation();
       } else {
@@ -225,22 +181,18 @@ const ControlPanel = () => {
   const handleSubmit = async () => {
     if (submitted) return;
 
-    const sumbitAnnotation = async () => {
+    if (hasActiveSegments()) {
+      alert("Cannot submit while a segment is active.");
+      return;
+    }
+
+    const submitAnnotation = async () => {
       try {
-        const res = await fetch(
-          `http://localhost:8000/api/v1/annotations/${currentAssignmentId}/submit`,
-          {
-            method: "POST",
-            credentials: "include",
-          },
+        const data = await api.post<Annotation>(
+          `/api/v1/annotations/${currentAssignmentId}/submit`,
         );
-        if (res.ok) {
-          const data = await res.json();
-          setSubmitted(true, data.submitted_at);
-        } else {
-          const error = await res.json();
-          throw new Error(error.detail || "Failed to submit annotation");
-        }
+
+        setSubmitted(true, data.submitted_at);
       } catch (err) {
         console.error("Error submitting annotation", err);
         throw err;
@@ -248,24 +200,12 @@ const ControlPanel = () => {
     };
 
     const updateAssignmentStatus = async () => {
-      try {
-        if (!currentAssignmentId) return;
-        const res = await fetch(
-          `http://localhost:8000/api/v1/assignments/${currentAssignmentId}`,
-          {
-            method: "PUT",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ status: VideoStatus.COMPLETED }),
-            credentials: "include",
-          },
-        );
+      if (!currentAssignmentId) return;
 
-        if (res.ok) {
-          const data = await res.json();
-          console.log(data);
-        } else {
-          throw new Error("Failed to update assignment status");
-        }
+      try {
+        await api.put(`/api/v1/assignments/${currentAssignmentId}`, {
+          status: VideoStatus.COMPLETED,
+        });
       } catch (err) {
         console.error("Error updating assignment status", err);
         throw err;
@@ -275,15 +215,18 @@ const ControlPanel = () => {
     setIsSubmitting(true);
     try {
       await handleSave();
-      await sumbitAnnotation();
+      await submitAnnotation();
       await updateAssignmentStatus();
       setIsSubmitModalOpen(false);
     } catch (err) {
-      alert(
-        err instanceof Error
-          ? `Failed to submit annotation: ${err.message}`
-          : "Failed to submit annotation",
-      );
+      const message =
+        err instanceof ApiError
+          ? err.message
+          : err instanceof Error
+            ? err.message
+            : "Unknown error";
+
+      alert(`Failed to submit annotation: ${message}`);
     } finally {
       setIsSubmitting(false);
     }
@@ -334,29 +277,54 @@ const ControlPanel = () => {
         <Modal
           title='Submit Annotation'
           onClose={() => setIsSubmitModalOpen(false)}>
-          <div className='space-y-4'>
-            <p className='text-neutral-600'>
-              Are you sure you want to submit this annotation?
-              <strong className='text-red-600'>
-                {" "}
-                This action cannot be undone.
-              </strong>
+          <div className='space-y-6 bg-background text-foreground'>
+            {hasActiveSegments() ? (
+              /* --- WARNING STATE: ACTIVE RUNNING TIMERS --- */
+              <div className='flex items-center gap-4 p-3 border-l-4 border-l-primary bg-primary/10 rounded-r-md'>
+                <span className='font-mono text-xs font-bold text-primary uppercase tracking-widest shrink-0 animate-pulse'>
+                  Active State:
+                </span>
+                <span className='text-sm font-medium'>
+                  Cannot submit while a behavior segment is active. Please end
+                  all behavior segments before submitting your annotation.
+                </span>
+              </div>
+            ) : (
+              /* --- STANDARD STATE: READY FOR SUBMISSION --- */
+              <div className='flex items-center gap-4 p-3 border-l-4 border-l-destructive bg-destructive/10 rounded-r-md'>
+                <span className='font-mono text-xs font-bold text-destructive uppercase tracking-widest shrink-0'>
+                  Critical:
+                </span>
+                <span className='text-sm font-medium'>
+                  Are you sure you want to submit this annotation? This action
+                  cannot be undone.
+                </span>
+              </div>
+            )}
+
+            {/* Secondary status description string */}
+            <p className='text-sm text-muted-foreground'>
+              {hasActiveSegments()
+                ? "Your chronological timeline is currently recording live telemetry."
+                : "Once submitted, you will not be able to edit this annotation."}
             </p>
-            <p className='text-sm text-neutral-500'>
-              Once submitted, you will not be able to edit this annotation.
-            </p>
-            <div className='flex justify-end gap-3 pt-4'>
+
+            {/* --- ACTION SYSTEM CONTROLS --- */}
+            <div className='flex justify-end gap-4 pt-2 border-t border-border/50'>
+              {/* Cancel: Ghost / Tertiary Layout */}
               <button
-                className='px-4 py-2 rounded-lg bg-neutral-200 hover:bg-neutral-300 text-neutral-800 font-semibold'
+                className='px-3 py-2 text-muted-foreground hover:text-foreground text-xs font-bold uppercase tracking-widest transition-colors disabled:opacity-50'
                 onClick={() => setIsSubmitModalOpen(false)}
                 disabled={isSubmitting}>
                 Cancel
               </button>
+
+              {/* Submit: Primary / Action Layout */}
               <button
-                className='px-4 py-2 rounded-lg bg-blue-500 hover:bg-blue-600 text-white font-semibold disabled:bg-blue-300'
+                className='px-5 py-2 bg-primary text-primary-foreground text-xs font-bold uppercase tracking-widest rounded shadow-main hover:brightness-110 active:scale-95 transition-all disabled:bg-muted/50 disabled:text-muted-foreground disabled:cursor-not-allowed'
                 onClick={handleSubmit}
-                disabled={isSubmitting}>
-                {isSubmitting ? "Submitting..." : "Submit"}
+                disabled={isSubmitting || submitted || hasActiveSegments()}>
+                {isSubmitting ? "Submitting..." : "Submit Task"}
               </button>
             </div>
           </div>

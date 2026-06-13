@@ -1,6 +1,6 @@
 import { create } from "zustand";
+import { Segment } from "@/types/annotation";
 import { Behavior, BehaviorStatus } from "@/types/behavior";
-import { Segment } from "@/types/segment";
 
 interface AnnotationState {
   currentTime: number;
@@ -18,7 +18,7 @@ interface AnnotationState {
   startBehavior: (behavior: Behavior, time: number) => void;
   endBehavior: (behavior: Behavior, time: number) => void;
   getBehaviorStatus: (behavior: Behavior) => BehaviorStatus;
-  getActiveBehaviors: (time: number) => Behavior[];
+  hasActiveSegments: () => boolean;
   clearInProgress: () => void;
   resetAnnotation: () => void;
 }
@@ -164,16 +164,9 @@ export const useAnnotationStore = create<AnnotationState>((set, get) => ({
     return BehaviorStatus.EMPTY;
   },
 
-  getActiveBehaviors: (time: number): Behavior[] => {
+  hasActiveSegments: () => {
     const { segments } = get();
-
-    return segments
-      .filter(
-        (segment) =>
-          segment.startTime <= time &&
-          (segment.endTime === null || segment.endTime >= time),
-      )
-      .map((segment) => segment.behavior);
+    return segments.some((segment) => segment.endTime === null);
   },
 
   clearInProgress: () => {

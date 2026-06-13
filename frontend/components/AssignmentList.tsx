@@ -5,6 +5,7 @@ import { ExternalLink, Inbox } from "lucide-react";
 import { AssignmentSummary } from "@/types/assignment";
 import { useAssignmentStore } from "@/store/useAssignmentStore";
 import { useUserStore } from "@/store/useUserStore";
+import api from "@/lib/api";
 
 const AssignmentList = () => {
   const currentUser = useUserStore((s) => s.currentUser);
@@ -19,14 +20,7 @@ const AssignmentList = () => {
     }
     const fetchMyAssignments = async () => {
       try {
-        const res = await fetch("http://localhost:8000/api/v1/assignments", {
-          credentials: "include",
-        });
-        if (!res.ok) {
-          throw new Error("Failed to fetch assignments");
-        }
-        const data = await res.json();
-        console.log("My Assignments:", data);
+        const data = await api.get<AssignmentSummary[]>(`/api/v1/assignments`);
         setAssignments(Array.isArray(data) ? data : []);
       } catch (error) {
         console.error("Error fetching assignments:", error);

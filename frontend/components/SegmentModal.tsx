@@ -2,8 +2,8 @@
 
 import { useState } from "react";
 import { useAnnotationStore } from "@/store/useAnnotationStore";
+import { Segment } from "@/types/annotation";
 import { BehaviorStatus } from "@/types/behavior";
-import { Segment } from "@/types/segment";
 import Modal from "@/components/Modal";
 
 interface SegmentModalProps {
@@ -82,7 +82,10 @@ const SegmentModal = ({ segment, onClose }: SegmentModalProps) => {
 
   return (
     <Modal title='Edit Segment' onClose={onClose}>
-      <div className='space-y-6'>
+      <div
+        className='space-y-6'
+        onKeyDown={(e) => e.stopPropagation()}
+        onKeyUp={(e) => e.stopPropagation()}>
         <div className='text-center'>
           <h2 className='text-lg font-bold uppercase tracking-widest text-foreground'>
             {segment.behavior.name}

@@ -10,6 +10,7 @@ import MemberLinker from "@/components/MemberLinker";
 import ProjectDetails from "@/components/ProjectDetails";
 import SystemError from "@/components/SystemError";
 import VideoLinker from "@/components/VideoLinker";
+import api from "@/lib/api";
 
 const ProjectManagement = () => {
   const currentProject = useProjectStore((s) => s.currentProject);
@@ -35,14 +36,9 @@ const ProjectManagement = () => {
       fetchProject().catch(() => {});
       const loadAssignments = async () => {
         try {
-          const res = await fetch(
-            `http://localhost:8000/api/v1/projects/${currentProject.id}/assignments`,
-            {
-              credentials: "include",
-            },
+          const data = await api.get<AssignmentSummary[]>(
+            `/api/v1/projects/${currentProject.id}/assignments`,
           );
-          if (!res.ok) throw new Error(`HTTP ${res.status}`);
-          const data = await res.json();
           setAssignments(data);
         } catch (err) {
           console.error("Failed to load assignments:", err);

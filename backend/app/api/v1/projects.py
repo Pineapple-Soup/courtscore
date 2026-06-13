@@ -157,7 +157,7 @@ def remove_project_member(
 
     Returns the updated project.
     """
-    updated_project =project_service.remove_member(project_id, payload.user_id)
+    updated_project = project_service.remove_member(project_id, payload.user_id)
     return ProjectResponse.model_validate(updated_project)
 
 @router.get("/{project_id}/videos", response_model=list[ProjectVideoResponse], status_code=200)
