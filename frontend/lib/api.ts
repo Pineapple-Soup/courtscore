@@ -68,17 +68,30 @@ const REFRESH_INTERVAL_MS = 5 * 60 * 1000;
 /**
  * Singleton that manages proactive session refresh.
  * Starts a background interval that calls POST /auth/refresh periodically,
- * keeping the JWT cookie alive as long as the browser tab is open.
+ * keeping the JWT cookie alive as long as the browser tab is open and the user is active.
  * Only runs on the client side.
  */
 class SessionManager {
   private intervalId: ReturnType<typeof setInterval> | null = null;
   private started = false;
+  private lastActivityTime = Date.now();
+  private lastActivityLogged = 0;
+  
+  /** Idle threshold (ms) after which session won't be proactively refreshed. Default: 15 min. */
+  private readonly IDLE_THRESHOLD_MS = 15 * 60 * 1000;
+  private readonly activityEvents = ["mousedown", "keydown", "scroll", "touchstart", "mousemove"] as const;
 
   /** Begin the proactive refresh cycle. Safe to call multiple times. */
   start(): void {
     if (this.started || typeof window === "undefined") return;
     this.started = true;
+    this.lastActivityTime = Date.now();
+    this.lastActivityLogged = Date.now();
+
+    // Register user activity tracking
+    this.activityEvents.forEach((event) => {
+      document.addEventListener(event, this.updateActivity, { passive: true });
+    });
 
     // Fire the first refresh after the interval, not immediately —
     // the user just authenticated so the token is fresh.
@@ -100,8 +113,20 @@ class SessionManager {
     this.started = false;
     if (typeof document !== "undefined") {
       document.removeEventListener("visibilitychange", this.onVisibilityChange);
+      this.activityEvents.forEach((event) => {
+        document.removeEventListener(event, this.updateActivity);
+      });
     }
   }
+
+  private updateActivity = (): void => {
+    const now = Date.now();
+    // Throttle updates to once every 10 seconds to avoid performance overhead
+    if (now - this.lastActivityLogged > 10 * 1000) {
+      this.lastActivityTime = now;
+      this.lastActivityLogged = now;
+    }
+  };
 
   private onVisibilityChange = (): void => {
     if (document.visibilityState === "visible") {
@@ -111,6 +136,11 @@ class SessionManager {
 
   /** Fire a single refresh request. Silently swallows errors. */
   private async refresh(): Promise<void> {
+    // Only refresh if the user has been active within the idle threshold
+    if (Date.now() - this.lastActivityTime > this.IDLE_THRESHOLD_MS) {
+      return;
+    }
+
     try {
       await fetch(`${BASE_URL}/auth/refresh`, {
         method: "POST",
