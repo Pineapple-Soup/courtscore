@@ -5,6 +5,8 @@ import { useUserStore } from "@/store/useUserStore";
 // ---------------------------------------------------------------------------
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+const REFRESH_INTERVAL_MS = 10 * 60 * 1000; // 10 minutes
+const IDLE_THRESHOLD_MS = 15 * 60 * 1000; // 15 minutes
 
 // ---------------------------------------------------------------------------
 // Error class
@@ -62,8 +64,16 @@ function handleUnauthorized(): void {
 // Session refresh logic
 // ---------------------------------------------------------------------------
 
-/** How often (ms) the proactive refresh timer fires. Default: every 5 min. */
-const REFRESH_INTERVAL_MS = 5 * 60 * 1000;
+/**
+ * Options for configuring the SessionManager.
+ */
+interface SessionManagerOptions {
+  baseUrl?: string;
+  /** How often (ms) the proactive refresh timer fires. */
+  refreshIntervalMs?: number;
+  /** Idle threshold (ms) after which session won't be proactively refreshed. */
+  idleThresholdMs?: number;
+}
 
 /**
  * Singleton that manages proactive session refresh.
@@ -76,10 +86,23 @@ class SessionManager {
   private started = false;
   private lastActivityTime = Date.now();
   private lastActivityLogged = 0;
-  
-  /** Idle threshold (ms) after which session won't be proactively refreshed. Default: 15 min. */
-  private readonly IDLE_THRESHOLD_MS = 15 * 60 * 1000;
-  private readonly activityEvents = ["mousedown", "keydown", "scroll", "touchstart", "mousemove"] as const;
+
+  private readonly baseUrl: string;
+  private readonly refreshIntervalMs: number;
+  private readonly idleThresholdMs: number;
+  private readonly activityEvents = [
+    "mousedown",
+    "keydown",
+    "scroll",
+    "touchstart",
+    "mousemove",
+  ] as const;
+
+  constructor(options: SessionManagerOptions = {}) {
+    this.baseUrl = options.baseUrl ?? BASE_URL;
+    this.refreshIntervalMs = options.refreshIntervalMs ?? REFRESH_INTERVAL_MS;
+    this.idleThresholdMs = options.idleThresholdMs ?? IDLE_THRESHOLD_MS;
+  }
 
   /** Begin the proactive refresh cycle. Safe to call multiple times. */
   start(): void {
@@ -97,7 +120,7 @@ class SessionManager {
     // the user just authenticated so the token is fresh.
     this.intervalId = setInterval(() => {
       void this.refresh();
-    }, REFRESH_INTERVAL_MS);
+    }, this.refreshIntervalMs);
 
     // Also refresh when the tab regains visibility after being hidden
     // (e.g. user returns after a long break).
@@ -137,12 +160,12 @@ class SessionManager {
   /** Fire a single refresh request. Silently swallows errors. */
   private async refresh(): Promise<void> {
     // Only refresh if the user has been active within the idle threshold
-    if (Date.now() - this.lastActivityTime > this.IDLE_THRESHOLD_MS) {
+    if (Date.now() - this.lastActivityTime > this.idleThresholdMs) {
       return;
     }
 
     try {
-      await fetch(`${BASE_URL}/auth/refresh`, {
+      await fetch(`${this.baseUrl}/auth/refresh`, {
         method: "POST",
         credentials: "include",
       });
