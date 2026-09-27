@@ -5,6 +5,8 @@ import { useUserStore } from "@/store/useUserStore";
 // ---------------------------------------------------------------------------
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+const REFRESH_INTERVAL_MS = 10 * 60 * 1000; // 10 minutes
+const IDLE_THRESHOLD_MS = 15 * 60 * 1000; // 15 minutes
 
 // ---------------------------------------------------------------------------
 // Error class
@@ -59,6 +61,154 @@ function handleUnauthorized(): void {
 }
 
 // ---------------------------------------------------------------------------
+// Session refresh logic
+// ---------------------------------------------------------------------------
+
+/**
+ * Options for configuring the SessionManager.
+ */
+interface SessionManagerOptions {
+  baseUrl?: string;
+  /** How often (ms) the proactive refresh timer fires. */
+  refreshIntervalMs?: number;
+  /** Idle threshold (ms) after which session won't be proactively refreshed. */
+  idleThresholdMs?: number;
+}
+
+/**
+ * Singleton that manages proactive session refresh.
+ * Starts a background interval that calls POST /auth/refresh periodically,
+ * keeping the JWT cookie alive as long as the browser tab is open and the user is active.
+ * Only runs on the client side.
+ */
+class SessionManager {
+  private intervalId: ReturnType<typeof setInterval> | null = null;
+  private started = false;
+  private lastActivityTime = Date.now();
+  private lastActivityLogged = 0;
+
+  private readonly baseUrl: string;
+  private readonly refreshIntervalMs: number;
+  private readonly idleThresholdMs: number;
+  private readonly activityEvents = [
+    "mousedown",
+    "keydown",
+    "scroll",
+    "touchstart",
+    "mousemove",
+  ] as const;
+
+  constructor(options: SessionManagerOptions = {}) {
+    this.baseUrl = options.baseUrl ?? BASE_URL;
+    this.refreshIntervalMs = options.refreshIntervalMs ?? REFRESH_INTERVAL_MS;
+    this.idleThresholdMs = options.idleThresholdMs ?? IDLE_THRESHOLD_MS;
+  }
+
+  /** Begin the proactive refresh cycle. Safe to call multiple times. */
+  start(): void {
+    if (this.started || typeof window === "undefined") return;
+    this.started = true;
+    this.lastActivityTime = Date.now();
+    this.lastActivityLogged = Date.now();
+
+    // Register user activity tracking
+    this.activityEvents.forEach((event) => {
+      document.addEventListener(event, this.updateActivity, { passive: true });
+    });
+
+    // Fire the first refresh after the interval, not immediately —
+    // the user just authenticated so the token is fresh.
+    this.intervalId = setInterval(() => {
+      void this.refresh();
+    }, this.refreshIntervalMs);
+
+    // Also refresh when the tab regains visibility after being hidden
+    // (e.g. user returns after a long break).
+    document.addEventListener("visibilitychange", this.onVisibilityChange);
+  }
+
+  /** Stop the proactive refresh cycle. */
+  stop(): void {
+    if (this.intervalId) {
+      clearInterval(this.intervalId);
+      this.intervalId = null;
+    }
+    this.started = false;
+    if (typeof document !== "undefined") {
+      document.removeEventListener("visibilitychange", this.onVisibilityChange);
+      this.activityEvents.forEach((event) => {
+        document.removeEventListener(event, this.updateActivity);
+      });
+    }
+  }
+
+  private updateActivity = (): void => {
+    const now = Date.now();
+    // Throttle updates to once every 10 seconds to avoid performance overhead
+    if (now - this.lastActivityLogged > 10 * 1000) {
+      this.lastActivityTime = now;
+      this.lastActivityLogged = now;
+    }
+  };
+
+  private onVisibilityChange = (): void => {
+    if (document.visibilityState === "visible") {
+      void this.refresh();
+    }
+  };
+
+  /** Fire a single refresh request. Silently swallows errors. */
+  private async refresh(): Promise<void> {
+    // Only refresh if the user has been active within the idle threshold
+    if (Date.now() - this.lastActivityTime > this.idleThresholdMs) {
+      return;
+    }
+
+    try {
+      await fetch(`${this.baseUrl}/auth/refresh`, {
+        method: "POST",
+        credentials: "include",
+      });
+    } catch {
+      // Network error – do nothing; the reactive 401 handler will
+      // catch it on the next real API call.
+    }
+  }
+}
+
+export const sessionManager = new SessionManager();
+
+// ---------------------------------------------------------------------------
+// Reactive refresh: retry once on 401 before giving up
+// ---------------------------------------------------------------------------
+
+let isRefreshing: Promise<boolean> | null = null;
+
+/**
+ * Attempt a single token refresh. Returns true if the refresh succeeded.
+ * Deduplicates concurrent callers so only one refresh request is in flight.
+ */
+async function attemptRefresh(): Promise<boolean> {
+  if (isRefreshing) return isRefreshing;
+
+  isRefreshing = (async () => {
+    try {
+      const res = await fetch(`${BASE_URL}/auth/refresh`, {
+        method: "POST",
+        credentials: "include",
+      });
+      return res.ok;
+    } catch {
+      return false;
+    } finally {
+      isRefreshing = null;
+    }
+  })();
+
+  return isRefreshing;
+}
+
+// ---------------------------------------------------------------------------
 // Core request function
 // ---------------------------------------------------------------------------
 
@@ -107,23 +257,35 @@ async function request<T = unknown>(
   }
 
   // ---- Fetch ----
-  const res = await fetch(url, {
+  const fetchOptions: RequestInit = {
     ...rest,
     headers,
     body: resolvedBody,
     credentials: "include",
     signal,
-  });
+  };
 
-  // ---- 401 handling ----
+  let res = await fetch(url, fetchOptions);
+
+  // ---- 401 handling with refresh retry ----
   if (res.status === 401 && !skipAuthRedirect) {
-    handleUnauthorized();
-    const errorData = await res.json().catch(() => ({}));
-    throw new ApiError(
-      (errorData as Record<string, string>)?.detail || "Unauthorized",
-      401,
-      errorData,
-    );
+    // Try to refresh the token once before giving up
+    const refreshed = await attemptRefresh();
+    if (refreshed) {
+      // Retry the original request with a fresh token
+      res = await fetch(url, fetchOptions);
+    }
+
+    // If still 401 after refresh (or refresh failed), redirect to login
+    if (res.status === 401) {
+      handleUnauthorized();
+      const errorData = await res.json().catch(() => ({}));
+      throw new ApiError(
+        (errorData as Record<string, string>)?.detail || "Unauthorized",
+        401,
+        errorData,
+      );
+    }
   }
 
   // ---- Error handling ----
