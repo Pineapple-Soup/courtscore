@@ -9,7 +9,7 @@ from app.services.assignment import AssignmentService
 from app.services.annotation import AnnotationService
 from app.services.auth import get_current_user
 from app.services.gcs import GCSService
-from app.services.preprocess import PreprocessService
+# from app.services.preprocess import PreprocessService
 from app.services.project_assignment import ProjectAssignmentService
 from app.services.project import ProjectService
 from app.services.user import UserService
@@ -41,8 +41,8 @@ def get_project_assignment_service(
 def get_gcs_service() -> GCSService:
     return GCSService()
 
-def get_preprocess_service() -> PreprocessService:
-    return PreprocessService(model_path=settings.YOLO_MODEL_PATH, conf_threshold=0.5)
+# def get_preprocess_service() -> PreprocessService:
+#    return PreprocessService(model_path=settings.YOLO_MODEL_PATH, conf_threshold=0.5)
 
 def get_project_service(
     db: Session = Depends(get_db), 
@@ -59,7 +59,7 @@ def get_user_service(
 def get_video_service(
     db: Session = Depends(get_db),
     ctx: ServiceContext = Depends(get_service_context),
-    preprocess_service: PreprocessService = Depends(get_preprocess_service),
+    # preprocess_service: PreprocessService = Depends(get_preprocess_service),
     gcs_service: GCSService = Depends(get_gcs_service)
 ) -> VideoService:
-    return VideoService(db=db, ctx=ctx, preprocess_service=preprocess_service, gcs_service=gcs_service)
+    return VideoService(db=db, ctx=ctx, gcs_service=gcs_service)

@@ -10,15 +10,15 @@ from app.core.context import ServiceContext
 from app.core.exceptions import ForbiddenError, ProcessingError, VideoNotFoundError
 from app.database.models import Video
 from app.services.gcs import GCSService
-from app.services.preprocess import PreprocessService
+# from app.services.preprocess import PreprocessService
 
 
 class VideoService:
-    def __init__(self, db: Session, ctx: ServiceContext, preprocess_service: PreprocessService, gcs_service: GCSService):
+    def __init__(self, db: Session, ctx: ServiceContext, gcs_service: GCSService) -> None:
         self.db = db
         self.ctx = ctx
         self.gcs_service = gcs_service or GCSService()
-        self.preprocess_service = preprocess_service
+        self.preprocess_service = None
     
     def _upload_single_video(self, file_path: str, label: Optional[str], description: Optional[str]) -> Video:
         id, gcp_path = self.gcs_service.upload_video(file_path)
@@ -105,14 +105,14 @@ class VideoService:
 
         return [created_video]
     
-    def upload_video_with_preprocess(self, file_path: str, label: Optional[str], description: Optional[str] = None) -> list[Video]:
-        self._require_admin()
+    # def upload_video_with_preprocess(self, file_path: str, label: Optional[str], description: Optional[str] = None) -> list[Video]:
+    #     self._require_admin()
 
-        file_path_list = self.preprocess_service.process_video(file_path, settings.OUTPUT_PATH)
-        created_videos: list[Video] = self._upload_multiple_videos(file_path_list, label, description)
-        self._cleanup_files(file_path_list + [file_path])
+    #     file_path_list = self.preprocess_service.process_video(file_path, settings.OUTPUT_PATH)
+    #     created_videos: list[Video] = self._upload_multiple_videos(file_path_list, label, description)
+    #     self._cleanup_files(file_path_list + [file_path])
 
-        return created_videos
+    #     return created_videos
 
     def save_upload_locally(self, file: BinaryIO, filename: str) -> str:
         safe_filename = os.path.basename(filename)
