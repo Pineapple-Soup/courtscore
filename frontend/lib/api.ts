@@ -4,7 +4,7 @@ import { useUserStore } from "@/store/useUserStore";
 // Config
 // ---------------------------------------------------------------------------
 
-const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+const BASE_URL = (process.env.NEXT_PUBLIC_API_URL || "").replace(/["']/g, "");
 const REFRESH_INTERVAL_MS = 10 * 60 * 1000; // 10 minutes
 const IDLE_THRESHOLD_MS = 15 * 60 * 1000; // 15 minutes
 
