@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { Upload } from "lucide-react";
+import { Upload, Loader2 } from "lucide-react";
 import { useVideoStore } from "@/store/useVideoStore";
 import Modal from "@/components/Modal";
 import SystemError from "@/components/SystemError";
@@ -10,6 +10,8 @@ const VideoCreate = () => {
   const [useModal, setUseModal] = useState(false);
   const [label, setLabel] = useState("");
   const [description, setDescription] = useState("");
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [progress, setProgress] = useState<number | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -18,23 +20,35 @@ const VideoCreate = () => {
   const resetForm = () => {
     setLabel("");
     setDescription("");
+    setSelectedFile(null);
+    setProgress(null);
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
     }
   };
 
+  const handleClose = () => {
+    if (loading) return;
+    resetForm();
+    setUseModal(false);
+  };
+
   const onCreate = async () => {
-    if (!label.trim() || !fileInputRef.current?.files?.[0] || loading) {
+    const file = fileInputRef.current?.files?.[0] || selectedFile;
+    if (!label.trim() || !file || loading) {
       return;
     }
 
-    const file = fileInputRef.current.files[0];
     try {
-      await createVideo(file, label.trim(), description.trim());
+      setProgress(0);
+      await createVideo(file, label.trim(), description.trim(), (pct) => {
+        setProgress(pct);
+      });
       resetForm();
       setUseModal(false);
     } catch (err) {
       console.error(err);
+      setProgress(null);
     }
   };
 
@@ -51,7 +65,7 @@ const VideoCreate = () => {
       </div>
 
       {useModal && (
-        <Modal title='Upload Video' onClose={() => setUseModal(false)}>
+        <Modal title='Upload Video' onClose={handleClose}>
           <div className='flex flex-col items-center justify-center text-center space-y-4'>
             <form
               onSubmit={(e) => {
@@ -95,26 +109,63 @@ const VideoCreate = () => {
                   ref={fileInputRef}
                   type='file'
                   accept='video/*'
+                  onChange={(e) => setSelectedFile(e.target.files?.[0] || null)}
+                  disabled={loading}
                   className='w-full px-3 py-2 rounded-md border border-border font-mono focus:outline-none focus:ring-2 focus:ring-ring'
                   required
                 />
+                {selectedFile && (
+                  <p className='text-xxs text-muted-foreground mt-1'>
+                    Selected:{" "}
+                    <span className='font-mono font-medium'>
+                      {selectedFile.name}
+                    </span>{" "}
+                    ({(selectedFile.size / (1024 * 1024)).toFixed(2)} MB)
+                  </p>
+                )}
               </div>
+
+              {progress !== null && (
+                <div className='space-y-1.5 py-1'>
+                  <div className='flex justify-between items-center text-xxs font-bold uppercase tracking-widest text-muted-foreground'>
+                    <span>
+                      {progress < 100
+                        ? "Uploading to storage..."
+                        : "Finalizing video..."}
+                    </span>
+                    <span className='font-mono font-bold text-foreground'>
+                      {progress}%
+                    </span>
+                  </div>
+                  <div className='w-full bg-muted rounded-full h-2.5 overflow-hidden border border-border'>
+                    <div
+                      className='bg-primary h-2.5 rounded-full transition-all duration-150 ease-out'
+                      style={{ width: `${progress}%` }}
+                    />
+                  </div>
+                </div>
+              )}
 
               {error && <SystemError message={error} />}
 
-              <div className='flex justify-end gap-2'>
+              <div className='flex justify-end gap-2 pt-2'>
                 <button
                   type='button'
-                  onClick={() => setUseModal(false)}
+                  onClick={handleClose}
                   className='px-4 py-2 rounded-lg bg-muted text-sm'
                   disabled={loading}>
                   Cancel
                 </button>
                 <button
                   type='submit'
-                  className='px-4 py-2 rounded-lg bg-primary text-sm text-primary-foreground font-bold'
+                  className='flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-primary text-sm text-primary-foreground font-bold disabled:opacity-50'
                   disabled={loading}>
-                  {loading ? "Uploading..." : "Upload Video"}
+                  {loading && <Loader2 size={14} className='animate-spin' />}
+                  {loading
+                    ? progress !== null && progress < 100
+                      ? `Uploading`
+                      : "Finalizing..."
+                    : "Upload Video"}
                 </button>
               </div>
             </form>

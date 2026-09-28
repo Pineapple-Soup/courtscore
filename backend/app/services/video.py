@@ -1,6 +1,7 @@
 from datetime import datetime
 import os
 import shutil
+import uuid
 
 from sqlalchemy.orm import Session, selectinload
 from typing import BinaryIO, Dict, List, Optional, cast
@@ -97,6 +98,24 @@ class VideoService:
             raise VideoNotFoundError(video_id)
         return self.gcs_service.generate_signed_url(str(video.src))
     
+    def get_upload_signed_url(self, filename: Optional[str] = None, content_type: Optional[str] = None) -> tuple[str, str, str]:
+        self._require_admin()
+        video_id = str(uuid.uuid4())
+        ext = ".mp4"
+        if filename and "." in filename:
+            ext = os.path.splitext(filename)[1]
+        blob_name = f"videos/{video_id}{ext}"
+        upload_url = self.gcs_service.generate_upload_signed_url(blob_name, content_type=content_type)
+        return video_id, blob_name, upload_url
+
+    def create(self, video_id: str, src: str, label: str, description: Optional[str] = None) -> Video:
+        self._require_admin()
+        new_video = Video(id=video_id, src=src, label=label, description=description)
+        self.db.add(new_video)
+        self.db.commit()
+        self.db.refresh(new_video)
+        return new_video
+
     def upload_video(self, file_path: str, label: Optional[str], description: Optional[str] = None) -> list[Video]:
         self._require_admin()
 

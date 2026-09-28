@@ -46,6 +46,17 @@ class GCSService:
         )
         return url
 
+    def generate_upload_signed_url(self, blob_name: str, content_type: Optional[str] = None) -> str:
+        bucket = self._get_bucket()
+        blob = bucket.blob(blob_name)
+        url = blob.generate_signed_url(
+            version="v4",
+            expiration=datetime.timedelta(minutes=15),
+            method="PUT",
+            content_type=content_type,
+        )
+        return url
+
     def delete_video(self, blob_name: str) -> None:
         bucket = self._get_bucket()
         blob = bucket.blob(blob_name)
