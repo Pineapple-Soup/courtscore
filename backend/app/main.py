@@ -1,5 +1,4 @@
 import os
-import uvicorn
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -59,7 +58,3 @@ os.makedirs(settings.OUTPUT_PATH, exist_ok=True)
 app.include_router(api_router)
 app.include_router(auth_router)
 app.include_router(health_router)
-
-
-if __name__ == "__main__":
-    uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=True)
