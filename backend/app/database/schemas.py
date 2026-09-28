@@ -72,6 +72,24 @@ class UserResponse(BaseResponse):
     project_count: Optional[int] = 0
 
 # Video
+class DirectUploadUrlRequest(BaseRequest):
+    filename: Optional[str] = None
+    content_type: Optional[str] = None
+
+
+class DirectUploadUrlResponse(BaseResponse):
+    video_id: str
+    blob_name: str
+    upload_url: str
+
+
+class CreateVideoRequest(BaseRequest):
+    id: str
+    src: str
+    label: str
+    description: Optional[str] = None
+
+
 class VideoResponse(BaseResponse):
     id: str
     src: str

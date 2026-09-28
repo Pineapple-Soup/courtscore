@@ -1,6 +1,7 @@
 from datetime import datetime
 import os
 import shutil
+import uuid
 
 from sqlalchemy.orm import Session, selectinload
 from typing import BinaryIO, Dict, List, Optional, cast
@@ -10,15 +11,15 @@ from app.core.context import ServiceContext
 from app.core.exceptions import ForbiddenError, ProcessingError, VideoNotFoundError
 from app.database.models import Video
 from app.services.gcs import GCSService
-from app.services.preprocess import PreprocessService
+# from app.services.preprocess import PreprocessService
 
 
 class VideoService:
-    def __init__(self, db: Session, ctx: ServiceContext, preprocess_service: PreprocessService, gcs_service: GCSService):
+    def __init__(self, db: Session, ctx: ServiceContext, gcs_service: GCSService) -> None:
         self.db = db
         self.ctx = ctx
         self.gcs_service = gcs_service or GCSService()
-        self.preprocess_service = preprocess_service
+        self.preprocess_service = None
     
     def _upload_single_video(self, file_path: str, label: Optional[str], description: Optional[str]) -> Video:
         id, gcp_path = self.gcs_service.upload_video(file_path)
@@ -97,6 +98,24 @@ class VideoService:
             raise VideoNotFoundError(video_id)
         return self.gcs_service.generate_signed_url(str(video.src))
     
+    def get_upload_signed_url(self, filename: Optional[str] = None, content_type: Optional[str] = None) -> tuple[str, str, str]:
+        self._require_admin()
+        video_id = str(uuid.uuid4())
+        ext = ".mp4"
+        if filename and "." in filename:
+            ext = os.path.splitext(filename)[1]
+        blob_name = f"videos/{video_id}{ext}"
+        upload_url = self.gcs_service.generate_upload_signed_url(blob_name, content_type=content_type)
+        return video_id, blob_name, upload_url
+
+    def create(self, video_id: str, src: str, label: str, description: Optional[str] = None) -> Video:
+        self._require_admin()
+        new_video = Video(id=video_id, src=src, label=label, description=description)
+        self.db.add(new_video)
+        self.db.commit()
+        self.db.refresh(new_video)
+        return new_video
+
     def upload_video(self, file_path: str, label: Optional[str], description: Optional[str] = None) -> list[Video]:
         self._require_admin()
 
@@ -105,14 +124,14 @@ class VideoService:
 
         return [created_video]
     
-    def upload_video_with_preprocess(self, file_path: str, label: Optional[str], description: Optional[str] = None) -> list[Video]:
-        self._require_admin()
+    # def upload_video_with_preprocess(self, file_path: str, label: Optional[str], description: Optional[str] = None) -> list[Video]:
+    #     self._require_admin()
 
-        file_path_list = self.preprocess_service.process_video(file_path, settings.OUTPUT_PATH)
-        created_videos: list[Video] = self._upload_multiple_videos(file_path_list, label, description)
-        self._cleanup_files(file_path_list + [file_path])
+    #     file_path_list = self.preprocess_service.process_video(file_path, settings.OUTPUT_PATH)
+    #     created_videos: list[Video] = self._upload_multiple_videos(file_path_list, label, description)
+    #     self._cleanup_files(file_path_list + [file_path])
 
-        return created_videos
+    #     return created_videos
 
     def save_upload_locally(self, file: BinaryIO, filename: str) -> str:
         safe_filename = os.path.basename(filename)

@@ -20,6 +20,7 @@ interface VideoStore {
     file: File,
     label: string,
     description: string,
+    onProgress?: (progress: number) => void,
   ) => Promise<void>;
   deleteVideo: (videoId: string) => Promise<void>;
   fetchVideos: () => Promise<void>;
@@ -40,20 +41,72 @@ export const useVideoStore = create<VideoStore>((set) => ({
   loading: true,
   error: null,
 
-  createVideo: async (file: File, label: string, description: string) => {
+  createVideo: async (
+    file: File,
+    label: string,
+    description: string,
+    onProgress?: (progress: number) => void,
+  ) => {
     set({ loading: true, error: null });
     try {
-      const formData = new FormData();
-      formData.append("file", file);
-      formData.append("label", label);
-      formData.append("description", description);
-      const newVideos = await api.post<Video[]>(
-        "/api/v1/videos/upload",
-        formData,
-      );
+      const contentType = file.type || "video/mp4";
+      const { videoId, blobName, uploadUrl } = await api.post<{
+        videoId: string;
+        blobName: string;
+        uploadUrl: string;
+      }>("/api/v1/videos/upload-url", {
+        filename: file.name,
+        contentType,
+      });
+
+      await new Promise<void>((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.open("PUT", uploadUrl);
+        if (contentType) {
+          xhr.setRequestHeader("Content-Type", contentType);
+        }
+
+        xhr.upload.onprogress = (event) => {
+          if (event.lengthComputable && onProgress) {
+            const percent = Math.round((event.loaded / event.total) * 100);
+            onProgress(percent);
+          }
+        };
+
+        xhr.onload = () => {
+          if (xhr.status >= 200 && xhr.status < 300) {
+            resolve();
+          } else {
+            reject(
+              new Error(`Storage upload failed with status ${xhr.status}`),
+            );
+          }
+        };
+
+        xhr.onerror = () => {
+          reject(new Error("Network error during direct storage upload"));
+        };
+
+        xhr.onabort = () => {
+          reject(new Error("Upload aborted"));
+        };
+
+        xhr.send(file);
+      });
+
+      const newVideo = await api.post<Video>("/api/v1/videos", {
+        id: videoId,
+        src: blobName,
+        label,
+        description,
+      });
+
+      if (globalThis.__videoSearchCache) {
+        globalThis.__videoSearchCache.clear();
+      }
 
       set((state) => ({
-        videos: state.videos ? [...state.videos, ...newVideos] : newVideos,
+        videos: state.videos ? [...state.videos, newVideo] : [newVideo],
       }));
     } catch (error) {
       set({

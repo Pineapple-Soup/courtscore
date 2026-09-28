@@ -1,6 +1,6 @@
 import type { NextConfig } from "next";
 
-const BACKEND_URL = process.env.BACKEND_PROXY_URL
+const BACKEND_URL = process.env.BACKEND_PROXY_URL || "http://localhost:8000";
 
 const nextConfig: NextConfig = {
   async rewrites() {

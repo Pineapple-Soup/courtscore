@@ -4,11 +4,49 @@ from fastapi import APIRouter, Depends, File, UploadFile, HTTPException, Form
 
 from app.api.dependencies import get_video_service
 from app.database.models import User
-from app.database.schemas import SignedUrlResponse, VideoResponse
+from app.database.schemas import (
+    CreateVideoRequest,
+    DirectUploadUrlRequest,
+    DirectUploadUrlResponse,
+    SignedUrlResponse,
+    VideoResponse,
+)
 from app.services.auth import require_role
 from app.services.video import VideoService
 
 router = APIRouter(prefix="/videos")
+
+
+@router.post("/upload-url", status_code=200, response_model=DirectUploadUrlResponse)
+def get_upload_url(
+    body: DirectUploadUrlRequest,
+    _: User = Depends(require_role("admin")),
+    video_service: VideoService = Depends(get_video_service),
+) -> DirectUploadUrlResponse:
+    video_id, blob_name, upload_url = video_service.get_upload_signed_url(
+        filename=body.filename,
+        content_type=body.content_type,
+    )
+    return DirectUploadUrlResponse(
+        video_id=video_id,
+        blob_name=blob_name,
+        upload_url=upload_url,
+    )
+
+
+@router.post("", status_code=201, response_model=VideoResponse)
+def create_video(
+    body: CreateVideoRequest,
+    _: User = Depends(require_role("admin")),
+    video_service: VideoService = Depends(get_video_service),
+) -> VideoResponse:
+    video = video_service.create(
+        video_id=body.id,
+        src=body.src,
+        label=body.label,
+        description=body.description,
+    )
+    return VideoResponse.model_validate(video)
 
 
 @router.post("/upload", status_code=201, response_model=list[VideoResponse])
