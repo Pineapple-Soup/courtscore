@@ -1,11 +1,13 @@
-import httpx
-import uuid
 import bcrypt
+import httpx
+import secrets
+import urllib.parse
+import uuid
 
-from typing import Mapping, Optional, Callable
-from jose import jwt, JWTError
-from fastapi import HTTPException, Depends, Response, Request
 from datetime import datetime, timedelta, timezone
+from fastapi import HTTPException, Depends, Response, Request
+from jose import jwt, JWTError
+from typing import Mapping, Optional, Callable
 
 from app.core.config import settings
 from app.database.db import get_db
@@ -13,18 +15,103 @@ from app.database.models import User
 from sqlalchemy.orm import Session
 
 ALGORITHM = "HS256"
+AUTH_COOKIE_NAME = "__Host-access_token" if settings.IS_PRODUCTION else "access_token"
+OAUTH_STATE_COOKIE = "__Host-oauth_state" if settings.IS_PRODUCTION else "oauth_state"
+OAUTH_NONCE_COOKIE = "__Host-oauth_nonce" if settings.IS_PRODUCTION else "oauth_nonce"
 
+
+def generate_oauth_state() -> str:
+    """Generate a cryptographically secure OAuth state value."""
+    return secrets.token_urlsafe(32)
+
+def generate_oauth_nonce() -> str:
+    """Generate a cryptographically secure OIDC nonce."""
+    return secrets.token_urlsafe(32)
+
+def verify_oauth_state(state: Optional[str], stored_state: Optional[str]) -> None:
+    """
+    Verify that the OAuth state returned by Google matches the value
+    stored in the user's browser.
+
+    Raises HTTPException if invalid.
+    """
+    if not state or not stored_state:
+        raise HTTPException(status_code=400, detail="Invalid OAuth state")
+
+    if not secrets.compare_digest(state, stored_state):
+        raise HTTPException(status_code=400, detail="Invalid OAuth state")
+
+def verify_oauth_nonce(nonce: Optional[str], stored_nonce: Optional[str]) -> None:
+    """
+    Verify that the OIDC nonce returned by Google matches the value
+    stored in the user's browser.
+
+    Raises HTTPException if invalid.
+    """
+    if not nonce or not stored_nonce:
+        raise HTTPException(status_code=400, detail="Invalid OIDC nonce")
+
+    if not secrets.compare_digest(nonce, stored_nonce):
+        raise HTTPException(status_code=400, detail="Invalid OIDC nonce")
+
+def get_google_auth_url(state, nonce) -> str:
+    """Construct the Google OAuth 2.0 authorization URL."""
+    base = "https://accounts.google.com/o/oauth2/v2/auth"
+    params = {
+        "client_id": settings.AUTH_GOOGLE_ID,
+        "redirect_uri": settings.AUTH_REDIRECT_URI,
+        "response_type": "code",
+        "scope": "openid email profile",
+        "state": state,
+        "nonce": nonce,
+        "access_type": "offline",
+    }
+
+    url = f"{base}?{urllib.parse.urlencode(params)}"
+    return url
+
+def clear_oauth_cookies(response: Response) -> None:
+    """Clear the oauth_state and oauth_nonce cookies"""
+    response.delete_cookie(OAUTH_STATE_COOKIE, path="/")
+    response.delete_cookie(OAUTH_NONCE_COOKIE, path="/")
+
+def set_oauth_cookies(response: Response, state: str, nonce: str) -> None:
+    """Set the oauth_state and oauth_nonce cookies with proper security attributes"""
+    response.set_cookie(
+        OAUTH_STATE_COOKIE, 
+        state,
+        httponly=True,
+        secure=settings.IS_PRODUCTION,
+        samesite="lax",
+        max_age=600,
+        path="/",
+    )
+
+    response.set_cookie(
+        OAUTH_NONCE_COOKIE,
+        nonce,
+        httponly=True,
+        secure=settings.IS_PRODUCTION,
+        samesite="lax",
+        max_age=600,
+        path="/",
+    )
 
 def set_auth_cookie(response: Response, token: str) -> None:
     """Set the access_token cookie with proper security attributes"""
     response.set_cookie(
-        "access_token",
+        AUTH_COOKIE_NAME,
         token,
         httponly=True,
         secure=settings.IS_PRODUCTION,
-        samesite="none" if settings.IS_PRODUCTION else "lax",
+        samesite="lax",
         max_age=settings.AUTH_JWT_EXP_SECONDS,
+        path="/",
     )
+
+def clear_auth_cookie(response: Response)   -> None:
+    """Clear the access_token cookie"""
+    response.delete_cookie(AUTH_COOKIE_NAME, path="/")
 
 def hash_password(password: str) -> str:
     """Hash a password using bcrypt"""
@@ -151,7 +238,7 @@ def user_from_google(id_info: Mapping, db: Session) -> User:
     return new_user
 
 def get_current_user(request: Request, db: Session = Depends(get_db)) -> User:
-    token = request.cookies.get("access_token")
+    token = request.cookies.get(AUTH_COOKIE_NAME)
     if not token:
         raise HTTPException(status_code=401, detail="Missing auth token")
     payload = decode_access_token(token)

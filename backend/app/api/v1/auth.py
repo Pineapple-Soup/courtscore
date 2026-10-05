@@ -1,6 +1,3 @@
-import secrets
-import urllib.parse
-
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from fastapi.responses import RedirectResponse
 from google.oauth2 import id_token as google_id_token
@@ -61,28 +58,13 @@ def login(
 
 @router.get("/google/login")
 def google_login() -> RedirectResponse:
-    base = "https://accounts.google.com/o/oauth2/v2/auth"
-    state = secrets.token_urlsafe(32)
-    params = {
-        "client_id": settings.AUTH_GOOGLE_ID,
-        "redirect_uri": settings.AUTH_REDIRECT_URI,
-        "response_type": "code",
-        "scope": "openid email profile",
-        "access_type": "offline",
-        "prompt": "consent",
-        "state": state
-    }
-
-    url = f"{base}?{urllib.parse.urlencode(params)}"
+    """Redirect the user to Google's OAuth 2.0 authorization endpoint."""
+    state = auth.generate_oauth_state()
+    nonce = auth.generate_oauth_nonce()
+    url = auth.get_google_auth_url(state, nonce)
 
     response = RedirectResponse(url)
-    response.set_cookie(
-        "oauth_state",
-        state,
-        httponly=True,
-        secure=settings.IS_PRODUCTION,
-        samesite="lax",
-    )
+    auth.set_oauth_cookies(response, state, nonce)
 
     return response
 
@@ -94,26 +76,32 @@ async def google_callback(
     code: str | None = None,
     state: str | None = None
 ) -> RedirectResponse:
-    if not code:
-        raise HTTPException(status_code=400, detail="Missing code")
 
-    stored_state = request.cookies.get("oauth_state")
-    if not stored_state or stored_state != state:
-        raise HTTPException(status_code=400, detail="Invalid OAuth state")
+    if not code or not state:
+        raise HTTPException(status_code=400, detail="Invalid OAuth callback")
 
-    # Exchange code for tokens
-    token_response = await auth.exchange_code_for_tokens(code)
-    id_token_str = token_response.get("id_token")
-    if not id_token_str:
-        raise HTTPException(status_code=400, detail="No id_token returned from provider")
+    stored_state = request.cookies.get(auth.OAUTH_STATE_COOKIE)
+    stored_nonce = request.cookies.get(auth.OAUTH_NONCE_COOKIE)
 
-    # Verify id_token locally
+    auth.verify_oauth_state(state, stored_state)
+
+    if not stored_nonce:
+        raise HTTPException(status_code=400, detail="Invalid OAuth transaction")
+
     try:
-        id_info = google_id_token.verify_oauth2_token(
-            id_token_str, google_requests.Request(), settings.AUTH_GOOGLE_ID
-        )
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Invalid id_token: {e}")
+        token_response = await auth.exchange_code_for_tokens(code)
+        id_token_str = token_response.get("id_token")
+
+        if not id_token_str:
+            raise HTTPException(status_code=400, detail="Google authentication failed")
+
+        id_info = google_id_token.verify_oauth2_token(id_token_str, google_requests.Request(), settings.AUTH_GOOGLE_ID)
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=400, detail="Google authentication failed")
+
+    auth.verify_oauth_nonce(id_info.get("nonce"), stored_nonce)
 
     user = auth.user_from_google(id_info, db)
     token = auth.create_access_token(str(user.id))
@@ -121,7 +109,7 @@ async def google_callback(
     # Set cookie
     response = RedirectResponse(settings.FRONTEND_URL + "/dashboard")
     auth.set_auth_cookie(response, token)
-    response.delete_cookie("oauth_state")
+    auth.clear_oauth_cookies(response)
     return response
 
 
@@ -139,7 +127,7 @@ def refresh_token(
     db: Session = Depends(get_db),
 ) -> dict[str, bool]:
     """Issue a fresh JWT if the current session cookie is still valid."""
-    token = request.cookies.get("access_token")
+    token = request.cookies.get(auth.AUTH_COOKIE_NAME)
     if not token:
         raise HTTPException(status_code=401, detail="Missing auth token")
 
@@ -160,7 +148,7 @@ def refresh_token(
 
 @router.post("/logout")
 def logout(response: Response) -> dict[str, bool]:
-    response.delete_cookie("access_token")
+    auth.clear_auth_cookie(response)
     return {"success": True}
 
 
